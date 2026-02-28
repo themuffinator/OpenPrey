@@ -880,6 +880,10 @@ extern idCVar r_bloomThreshold;		// bloom bright-pass threshold
 extern idCVar r_bloomSoftKnee;			// bloom soft threshold knee
 extern idCVar r_bloomIntensity;		// bloom contribution scale
 extern idCVar r_bloomRadius;			// bloom sample radius scale
+extern idCVar r_hdrToneMap;			// enable HDR tonemapping and color correction
+extern idCVar r_hdrExposure;			// HDR tonemap exposure
+extern idCVar r_hdrSaturation;			// post-process saturation
+extern idCVar r_hdrContrast;			// post-process contrast
 extern idCVar r_msaaResolveDepth;		// include depth when resolving MSAA render targets
 extern idCVar r_msaaAlphaToCoverage;	// alpha-to-coverage for perforated materials on MSAA targets
 

@@ -359,6 +359,11 @@ enum rbBloomUniformIndex_t {
 	RB_BLOOM_UNIFORM_SOFT_KNEE,
 	RB_BLOOM_UNIFORM_INTENSITY,
 	RB_BLOOM_UNIFORM_RADIUS,
+	RB_BLOOM_UNIFORM_BLOOM_ENABLED,
+	RB_BLOOM_UNIFORM_TONEMAP_ENABLED,
+	RB_BLOOM_UNIFORM_HDR_EXPOSURE,
+	RB_BLOOM_UNIFORM_HDR_SATURATION,
+	RB_BLOOM_UNIFORM_HDR_CONTRAST,
 	RB_BLOOM_UNIFORM_COUNT
 };
 
@@ -384,7 +389,12 @@ static void RB_InitBloomStage( void ) {
 		{ "bloomThreshold", 1 },
 		{ "bloomSoftKnee", 1 },
 		{ "bloomIntensity", 1 },
-		{ "bloomRadius", 1 }
+		{ "bloomRadius", 1 },
+		{ "bloomEnabled", 1 },
+		{ "toneMapEnabled", 1 },
+		{ "hdrExposure", 1 },
+		{ "hdrSaturation", 1 },
+		{ "hdrContrast", 1 }
 	};
 
 	rbBloomStage.numShaderParms = RB_BLOOM_UNIFORM_COUNT;
@@ -400,7 +410,19 @@ static void RB_InitBloomStage( void ) {
 }
 
 static void RB_STD_Bloom( void ) {
-	if ( r_skipPostProcess.GetBool() || r_skipGlowOverlay.GetBool() || !r_bloom.GetBool() ) {
+	if ( r_skipPostProcess.GetBool() ) {
+		return;
+	}
+
+	const bool bloomEnabled = r_bloom.GetBool() && !r_skipGlowOverlay.GetBool();
+	const bool toneMapEnabled = r_hdrToneMap.GetBool();
+	const float hdrSaturation = r_hdrSaturation.GetFloat();
+	const float hdrContrast = r_hdrContrast.GetFloat();
+	const bool colorAdjustEnabled =
+		idMath::Fabs( hdrSaturation - 1.0f ) > 0.001f ||
+		idMath::Fabs( hdrContrast - 1.0f ) > 0.001f;
+
+	if ( !bloomEnabled && !toneMapEnabled && !colorAdjustEnabled ) {
 		return;
 	}
 
@@ -479,8 +501,11 @@ static void RB_STD_Bloom( void ) {
 	};
 	const GLfloat threshold = r_bloomThreshold.GetFloat();
 	const GLfloat softKnee = r_bloomSoftKnee.GetFloat();
-	const GLfloat intensity = r_bloomIntensity.GetFloat();
+	const GLfloat intensity = bloomEnabled ? r_bloomIntensity.GetFloat() : 0.0f;
 	const GLfloat radius = r_bloomRadius.GetFloat();
+	const GLfloat bloomToggle = bloomEnabled ? 1.0f : 0.0f;
+	const GLfloat toneMapToggle = toneMapEnabled ? 1.0f : 0.0f;
+	const GLfloat hdrExposure = r_hdrExposure.GetFloat();
 
 	if ( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_INV_TEX_SIZE] >= 0 ) {
 		glUniform2fvARB( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_INV_TEX_SIZE], 1, invTexSize );
@@ -496,6 +521,21 @@ static void RB_STD_Bloom( void ) {
 	}
 	if ( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_RADIUS] >= 0 ) {
 		glUniform1fARB( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_RADIUS], radius );
+	}
+	if ( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_BLOOM_ENABLED] >= 0 ) {
+		glUniform1fARB( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_BLOOM_ENABLED], bloomToggle );
+	}
+	if ( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_TONEMAP_ENABLED] >= 0 ) {
+		glUniform1fARB( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_TONEMAP_ENABLED], toneMapToggle );
+	}
+	if ( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_HDR_EXPOSURE] >= 0 ) {
+		glUniform1fARB( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_HDR_EXPOSURE], hdrExposure );
+	}
+	if ( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_HDR_SATURATION] >= 0 ) {
+		glUniform1fARB( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_HDR_SATURATION], hdrSaturation );
+	}
+	if ( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_HDR_CONTRAST] >= 0 ) {
+		glUniform1fARB( rbBloomStage.shaderParmLocations[RB_BLOOM_UNIFORM_HDR_CONTRAST], hdrContrast );
 	}
 
 	const float maxS = static_cast<float>( viewportWidth ) / static_cast<float>( textureWidth );
