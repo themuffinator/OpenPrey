@@ -2813,41 +2813,6 @@
 								}
 							}
 
-							buttonDef OVN_AspectRatio {
-								rect			10, 280, 400, 25
-								leftMat			"guis/assets/menu/textbar_corner.tga"
-								middleMat		"guis/assets/menu/textbarstrip.tga"
-								rightMat		"guis/assets/menu/textbar_invcorner.tga"
-								
-								windowDef OVN_AspectRatioTitle {
-									rect		0, 0, 200, 25
-									text		"#str_20292"
-									textalign	1
-									textaligny	0
-									textscale	0.33
-									shadow		1
-									forecolor	STATIC_FORECOLOR_COMMA
-								}
-								
-								choiceDef OVN_AspectRatioChoice {
-									rect		200, 0, 200, 25
-									textalign	1
-									textaligny	0
-									textscale	0.33
-									shadow		1
-									forecolor	EDITABLE_FORECOLOR_COMMA
-									hovercolor	EDITABLE_HOVERCOLOR_COMMA
-									choices		"#str_20293"
-									values		"0;1;2"
-									cvar		"r_aspectratio"
-									updateGroup	render
-									choiceType	0
-									onAction {
-										//namedEvent "NeedVidRestart";
-									}
-								}
-							}
-
 							buttonDef OVN_ApplyChanges {
 								rect			280, 315, 115, 28
 								text			"#str_20294"

@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Launch OpenPrey MP (Meson Debug)",
+      "name": "Launch OpenPrey MP",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}\\.install\\OpenPrey-client_x64.exe",
@@ -36,7 +36,43 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Launch OpenPrey SP (Meson Debug)",
+      "name": "Launch OpenPrey SP (Biolabs A)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}\\.install\\OpenPrey-client_x64.exe",
+      "args": [
+        "+set",
+        "logFile",
+        "2",
+        "+set",
+        "logFileName",
+        "logs/openprey.log",
+        "+set",
+        "developer",
+        "1",
+        "+set",
+        "r_fullscreen",
+        "0",
+        "+set",
+        "fs_savepath",
+        "${workspaceFolder}\\.home",
+        "+set",
+        "fs_devpath",
+        "${workspaceFolder}\\.install",
+        "+set",
+        "fs_game",
+        "openprey",
+        "+set",
+        "si_gameType",
+        "singleplayer",
+        "+map",
+        "game/biolabsa"
+      ],
+      "cwd": "${workspaceFolder}\\.install",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Launch OpenPrey SP (Roadhouse)",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}\\.install\\OpenPrey-client_x64.exe",
