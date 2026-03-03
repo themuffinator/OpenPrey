@@ -529,6 +529,12 @@ public:
 	// prints memory info
 	virtual void			PrintMemInfo( MemInfo_t* mi );
 
+	// Prey subtitle table registration/runtime lookup.
+	virtual int				GetSubtitleIndex( const char* soundName );
+	virtual void			SetSubtitleData( int subIndex, int subNum, const char* subText, float subTime, int subChannel );
+	virtual soundSub_t*		GetSubtitle( int subIndex, int subNum );
+	virtual soundSubtitleList_t* GetSubtitleList( int subIndex );
+
 	//-------------------------
 
 	// Before a sound is reloaded, any active voices using it must
@@ -602,6 +608,30 @@ public:
 
 	bool						insideLevelLoad;
 
+private:
+	struct queuedSubtitle_t
+	{
+		int						subIndex;			// subtitle list index
+		int						subNum;				// authored subtitle number
+		const soundSub_t*		subtitle;			// active subtitle entry
+		int						endTime;			// absolute end time in ms
+	};
+
+	bool					SubtitleQueueContains( const soundSub_t* subtitle ) const;
+	bool					AppendSubtitleForChannel( const idSoundChannel* chan );
+	void					CollectActiveSubtitles();
+	void					PruneExpiredSubtitles();
+	bool					SyncSubtitleQueues();
+	void					PresentSubtitles();
+	void					ClearSubtitleRuntimeQueue();
+
+	idList<queuedSubtitle_t>	sb_subtitleQueue;		// backend/runtime queue
+	bool						subtitleQueueChanged;	// backend/frontend dirty bit
+	idList<const soundSub_t*>	sf_subtitleQueue;		// frontend copy used by GUI
+
+public:
+	idList<soundSubtitleList_t> soundSubtitleList;		// registered subtitle tables by sound shader
+
 	//-------------------------
 
 	idSoundSystemLocal() :
@@ -609,7 +639,8 @@ public:
 		soundTime( 0 ),
 		muted( false ),
 		musicMuted( false ),
-		needsRestart( false )
+		needsRestart( false ),
+		subtitleQueueChanged( false )
 	{}
 };
 

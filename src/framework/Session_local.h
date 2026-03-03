@@ -118,6 +118,8 @@ public:
 	virtual void		DownloadProgressBox( backgroundDownload_t *bgl, const char *title, int progress_start = 0, int progress_end = 100 );
 	virtual void		SetPlayingSoundWorld();
 	void				SetPlayingSoundWorld( idSoundWorld *soundWorld );
+	void				ShowSubtitle( const idStrList& strList );
+	void				HideSubtitle() const;
 
 	virtual void		TimeHitch( int msec );
 
@@ -251,6 +253,7 @@ public:
 	idUserInterface *	guiIntro;
 	idUserInterface *	guiGameOver;
 	idUserInterface *	guiTest;
+	idUserInterface *	guiSubtitles;
 	idUserInterface *	guiTakeNotes;
 	
 	idUserInterface *	guiMsg;

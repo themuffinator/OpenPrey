@@ -3,6 +3,43 @@
 
 
 
+static bool BuildProfanityFilteredString( const char* input, const char* replacement, bool censorProfanity, idStr& out ) {
+	static const char* openTag = "<PROFANITY>";
+	static const char* closeTag = "</PROFANITY>";
+	static const int openTagLen = 11;
+	static const int closeTagLen = 12;
+
+	const char* open = strstr( input, openTag );
+	if( open == NULL ) {
+		return false;
+	}
+
+	out.Empty();
+	const char* cursor = input;
+	while( open != NULL ) {
+		out.Append( cursor, static_cast<int>( open - cursor ) );
+		const char* profanityStart = open + openTagLen;
+		const char* close = strstr( profanityStart, closeTag );
+		if( close == NULL ) {
+			// Keep malformed trailing content verbatim.
+			out.Append( open );
+			return true;
+		}
+
+		if( censorProfanity ) {
+			out.Append( replacement );
+		} else {
+			out.Append( profanityStart, static_cast<int>( close - profanityStart ) );
+		}
+
+		cursor = close + closeTagLen;
+		open = strstr( cursor, openTag );
+	}
+
+	out.Append( cursor );
+	return true;
+}
+
 /*
 ============
 idLangDict::idLangDict
@@ -13,6 +50,7 @@ idLangDict::idLangDict( void ) {
 	hash.SetGranularity( 256 );
 	hash.Clear( 4096, 8192 );
 	baseID = 0;
+	profanityScratchIndex = 0;
 }
 
 /*
@@ -32,6 +70,10 @@ idLangDict::Clear
 void idLangDict::Clear( void ) {
 	args.Clear();
 	hash.Clear();
+	profanityScratchIndex = 0;
+	for( int i = 0; i < 4; ++i ) {
+		profanityScratch[i].Clear();
+	}
 }
 
 /*
@@ -142,7 +184,29 @@ const char *idLangDict::GetString( const char *str ) const {
 	int hashKey = GetHashKey( str );
 	for ( int i = hash.First( hashKey ); i != -1; i = hash.Next( i ) ) {
 		if ( args[i].key.Cmp( str ) == 0 ) {
-			return args[i].value;
+			const char* value = args[i].value;
+			idStr& filtered = profanityScratch[ profanityScratchIndex ];
+			const int nextScratch = ( profanityScratchIndex + 1 ) & 3;
+			profanityScratchIndex = nextScratch;
+
+			bool censorProfanity = true;
+			if( idLib::cvarSystem != NULL ) {
+				censorProfanity = idLib::cvarSystem->GetCVarInteger( "com_profanity" ) == 0;
+			}
+
+			const char* replacement = "!@#$";
+			const int replacementHash = GetHashKey( "#str_41028" );
+			for( int j = hash.First( replacementHash ); j != -1; j = hash.Next( j ) ) {
+				if( args[j].key.Cmp( "#str_41028" ) == 0 ) {
+					replacement = args[j].value;
+					break;
+				}
+			}
+
+			if( BuildProfanityFilteredString( value, replacement, censorProfanity, filtered ) ) {
+				return filtered.c_str();
+			}
+			return value;
 		}
 	}
 
@@ -168,7 +232,29 @@ const char *idLangDict::GetString( const char *str ) const {
 			hashKey = GetHashKey( remapped );
 			for ( int i = hash.First( hashKey ); i != -1; i = hash.Next( i ) ) {
 				if ( args[i].key.Cmp( remapped ) == 0 ) {
-					return args[i].value;
+					const char* value = args[i].value;
+					idStr& filtered = profanityScratch[ profanityScratchIndex ];
+					const int nextScratch = ( profanityScratchIndex + 1 ) & 3;
+					profanityScratchIndex = nextScratch;
+
+					bool censorProfanity = true;
+					if( idLib::cvarSystem != NULL ) {
+						censorProfanity = idLib::cvarSystem->GetCVarInteger( "com_profanity" ) == 0;
+					}
+
+					const char* replacement = "!@#$";
+					const int replacementHash = GetHashKey( "#str_41028" );
+					for( int j = hash.First( replacementHash ); j != -1; j = hash.Next( j ) ) {
+						if( args[j].key.Cmp( "#str_41028" ) == 0 ) {
+							replacement = args[j].value;
+							break;
+						}
+					}
+
+					if( BuildProfanityFilteredString( value, replacement, censorProfanity, filtered ) ) {
+						return filtered.c_str();
+					}
+					return value;
 				}
 			}
 		}

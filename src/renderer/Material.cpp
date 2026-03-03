@@ -717,6 +717,11 @@ int idMaterial::ParseTerm( idLexer &src ) {
 		pd->registersAreConstant = false;
 		return EXP_REG_SPIRIT_WALK;
 	}
+	if ( !token.Icmp( "notSpiritWalk" ) ) {
+		pd->registersAreConstant = false;
+		const int zeroRegister = GetExpressionConstant( 0.0f );
+		return EmitOp( EXP_REG_SPIRIT_WALK, zeroRegister, OP_TYPE_EQ );
+	}
 	if ( !token.Icmp( "shuttleView" ) ) {
 		pd->registersAreConstant = false;
 		return EXP_REG_SHUTTLE_VIEW;
@@ -2006,7 +2011,7 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 			}
 			continue;
 		}
-		if ( !token.Icmp( "scopeView" ) || !token.Icmp( "notScopeView" ) || !token.Icmp( "spiritWalk" ) || !token.Icmp( "shuttleView" ) ) {
+		if ( !token.Icmp( "scopeView" ) || !token.Icmp( "notScopeView" ) || !token.Icmp( "spiritWalk" ) || !token.Icmp( "notSpiritWalk" ) || !token.Icmp( "shuttleView" ) ) {
 			int viewModeRegister = -1;
 			bool invertViewMode = false;
 
@@ -2017,6 +2022,9 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 				invertViewMode = true;
 			} else if ( !token.Icmp( "spiritWalk" ) ) {
 				viewModeRegister = EXP_REG_SPIRIT_WALK;
+			} else if ( !token.Icmp( "notSpiritWalk" ) ) {
+				viewModeRegister = EXP_REG_SPIRIT_WALK;
+				invertViewMode = true;
 			} else {
 				viewModeRegister = EXP_REG_SHUTTLE_VIEW;
 			}

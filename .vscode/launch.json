@@ -72,7 +72,7 @@
       "console": "integratedTerminal"
     },
     {
-      "name": "Launch OpenPrey SP (Roadhouse)",
+      "name": "Launch OpenPrey SP (Biolabs B)",
       "type": "cppvsdbg",
       "request": "launch",
       "program": "${workspaceFolder}\\.install\\OpenPrey-client_x64.exe",
@@ -102,7 +102,43 @@
         "si_gameType",
         "singleplayer",
         "+map",
-        "game/roadhouse"
+        "game/biolabsb"
+      ],
+      "cwd": "${workspaceFolder}\\.install",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Launch OpenPrey SP (Feeding Tower A)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}\\.install\\OpenPrey-client_x64.exe",
+      "args": [
+        "+set",
+        "logFile",
+        "2",
+        "+set",
+        "logFileName",
+        "logs/openprey.log",
+        "+set",
+        "developer",
+        "1",
+        "+set",
+        "r_fullscreen",
+        "0",
+        "+set",
+        "fs_savepath",
+        "${workspaceFolder}\\.home",
+        "+set",
+        "fs_devpath",
+        "${workspaceFolder}\\.install",
+        "+set",
+        "fs_game",
+        "openprey",
+        "+set",
+        "si_gameType",
+        "singleplayer",
+        "+map",
+        "game/feedingtowera"
       ],
       "cwd": "${workspaceFolder}\\.install",
       "console": "integratedTerminal"

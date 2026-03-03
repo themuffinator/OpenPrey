@@ -39,6 +39,8 @@ public:
 private:
 	idList<idLangKeyValue>	args;
 	idHashIndex				hash;
+	mutable idStr			profanityScratch[4];
+	mutable int				profanityScratchIndex;
 
 	bool					ExcludeString( const char *str ) const;
 	int						GetNextId( void ) const;

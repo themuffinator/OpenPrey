@@ -78,6 +78,20 @@ static const int	SSF_CENTER = BIT(15);	// sound through center channel only
 static const int	SSF_HILITE = BIT(16);	// display debug info for this emitter
 // RAVEN END
 
+// Prey subtitle table entry metadata parsed from sound shaders.
+typedef struct
+{
+	idStr					subText;				// language token or literal subtitle text
+	float					subTime;				// relative start time in seconds from sound start
+	int						subChannel;				// authored subtitle slot/index
+} soundSub_t;
+
+typedef struct
+{
+	idStr					soundName;				// shader name
+	idList<soundSub_t>		subList;					// ordered subtitle entries
+} soundSubtitleList_t;
+
 // these options can be overriden from sound shader defaults on a per-emitter and per-channel basis
 typedef struct
 {
@@ -466,6 +480,12 @@ public:
 
 	// prints memory info
 	virtual void			PrintMemInfo( MemInfo_t* mi ) = 0;
+
+	// Prey subtitle table registration/runtime lookup.
+	virtual int				GetSubtitleIndex( const char* soundName ) = 0;
+	virtual void			SetSubtitleData( int subIndex, int subNum, const char* subText, float subTime, int subChannel ) = 0;
+	virtual soundSub_t*		GetSubtitle( int subIndex, int subNum ) = 0;
+	virtual soundSubtitleList_t* GetSubtitleList( int subIndex ) = 0;
 
 // jmarshall: Quake 4 specific code
 // RAVEN BEGIN

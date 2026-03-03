@@ -684,7 +684,7 @@ idSessionLocal::idSessionLocal
 idSessionLocal::idSessionLocal() {
 	guiInGame = guiMainMenu = guiIntro \
 		= guiRestartMenu = guiLoading = guiGameOver = guiActive \
-		= guiTest = guiMsg = guiMsgRestore = guiTakeNotes = NULL;	
+		= guiTest = guiMsg = guiMsgRestore = guiTakeNotes = guiSubtitles = NULL;	
 	
 	menuSoundWorld = NULL;
 	
@@ -2993,6 +2993,9 @@ void idSessionLocal::Draw() {
 		// draw the menus full screen
 		if ( guiActive == guiTakeNotes && !com_skipGameDraw.GetBool() ) {
 			game->Draw( GetLocalClientNum() );
+			if ( guiSubtitles ) {
+				guiSubtitles->Redraw( com_frameTime );
+			}
 		}
 
 		const bool guiDrawsGame = guiActive->State().GetBool( "gameDraw" );
@@ -3006,6 +3009,9 @@ void idSessionLocal::Draw() {
 		if ( guiDrawsGame ) {
 			if ( mapSpawned && !com_skipGameDraw.GetBool() && GetLocalClientNum() >= 0 ) {
 				bool gameDraw = game->Draw( GetLocalClientNum() );
+				if ( guiSubtitles ) {
+					guiSubtitles->Redraw( com_frameTime );
+				}
 				if ( !gameDraw ) {
 					renderSystem->SetColor( colorBlack );
 					renderSystem->DrawStretchPic( 0, 0, 640, 480, 0, 0, 1, 1, declManager->FindMaterial( "_white" ) );
@@ -3031,6 +3037,9 @@ void idSessionLocal::Draw() {
 			// draw the game view
 			int	start = Sys_Milliseconds();
 			gameDraw = game->Draw( GetLocalClientNum() );
+			if ( guiSubtitles ) {
+				guiSubtitles->Redraw( com_frameTime );
+			}
 			int end = Sys_Milliseconds();
 			time_gameDraw += ( end - start );	// note time used for com_speeds
 		}
@@ -3568,6 +3577,8 @@ void idSessionLocal::Init() {
 	guiMsg = uiManager->FindGui( "guis/msg.gui", true, false, true );
 	guiTakeNotes = uiManager->FindGui( "guis/takeNotes.gui", true, false, true );
 	guiIntro = uiManager->FindGui( "guis/intro.gui", true, false, true );
+	guiSubtitles = uiManager->CheckGui( "guis/subtitles.gui" ) ? uiManager->FindGui( "guis/subtitles.gui", true, false, true ) : NULL;
+	HideSubtitle();
 
 	whiteMaterial = declManager->FindMaterial( "_white" );
 
@@ -3623,6 +3634,55 @@ void idSessionLocal::SetPlayingSoundWorld() {
 	} else {
 		SetPlayingSoundWorld( sw );
 	}
+}
+
+/*
+===============
+idSessionLocal::ShowSubtitle
+===============
+*/
+void idSessionLocal::ShowSubtitle( const idStrList& strList ) {
+	if ( !guiSubtitles ) {
+		return;
+	}
+
+	const int num = strList.Num();
+	for ( int i = 0; i < 3; i++ ) {
+		const int index = num - 1 - i;
+		char textVar[32];
+
+		idStr::snPrintf( textVar, sizeof( textVar ), "subtitleText%d", 3 - i );
+		if ( index >= 0 ) {
+			const char* subtitleText = common->GetLanguageDict()->GetString( strList[index].c_str() );
+			guiSubtitles->SetStateString( textVar, subtitleText );
+
+			idStr::snPrintf( textVar, sizeof( textVar ), "subtitleAlpha%d", 3 - i );
+			guiSubtitles->SetStateFloat( textVar, 1.0f );
+		} else {
+			guiSubtitles->SetStateString( textVar, "" );
+			idStr::snPrintf( textVar, sizeof( textVar ), "subtitleAlpha%d", 3 - i );
+			guiSubtitles->SetStateFloat( textVar, 0.0f );
+		}
+	}
+
+	guiSubtitles->StateChanged( game ? game->GetTimeGroupTime( 1 ) : com_frameTime );
+}
+
+/*
+===============
+idSessionLocal::HideSubtitle
+===============
+*/
+void idSessionLocal::HideSubtitle() const {
+	if ( !guiSubtitles ) {
+		return;
+	}
+
+	guiSubtitles->SetStateFloat( "subtitleAlpha1", 0.0f );
+	guiSubtitles->SetStateFloat( "subtitleAlpha2", 0.0f );
+	guiSubtitles->SetStateFloat( "subtitleAlpha3", 0.0f );
+	guiSubtitles->SetStateFloat( "subtitleAlpha4", 0.0f );
+	guiSubtitles->SetStateFloat( "subtitleAlpha5", 0.0f );
 }
 
 /*

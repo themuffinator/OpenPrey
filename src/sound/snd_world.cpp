@@ -975,6 +975,11 @@ void idSoundWorldLocal::ProcessDemoCommand( idDemoFile* readDemo )
 			idVec3 origin;
 			int listenerId;
 			soundShaderParms_t parms;
+			memset( &parms, 0, sizeof( parms ) );
+			parms.subIndex = -1;
+			parms.frequencyShift = 1.0f;
+			parms.wetLevel = 0.0f;
+			parms.dryLevel = 1.0f;
 
 			readDemo->ReadInt( index );
 			readDemo->ReadVec3( origin );
@@ -1010,6 +1015,11 @@ void idSoundWorldLocal::ProcessDemoCommand( idDemoFile* readDemo )
 		{
 			int		channel;
 			soundShaderParms_t parms;
+			memset( &parms, 0, sizeof( parms ) );
+			parms.subIndex = -1;
+			parms.frequencyShift = 1.0f;
+			parms.wetLevel = 0.0f;
+			parms.dryLevel = 1.0f;
 
 			readDemo->ReadInt( index );
 			readDemo->ReadInt( channel );
@@ -1188,6 +1198,12 @@ void idSoundWorldLocal::ReadFromSaveGame( idFile* savefile )
 		}
 		static void ReadShaderParms( idFile* savefile, soundShaderParms_t& parms )
 		{
+			memset( &parms, 0, sizeof( parms ) );
+			parms.subIndex = -1;
+			parms.frequencyShift = 1.0f;
+			parms.wetLevel = 0.0f;
+			parms.dryLevel = 1.0f;
+
 			savefile->ReadFloat( parms.minDistance );
 			savefile->ReadFloat( parms.maxDistance );
 			savefile->ReadFloat( parms.volume );

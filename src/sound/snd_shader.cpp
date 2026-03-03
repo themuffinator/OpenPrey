@@ -60,7 +60,40 @@ static bool ParseSoundClassToken( idToken &token, int &soundClass ) {
 	return false;
 }
 
-static bool ParseSubtitleDirective( idLexer& src ) {
+static bool ParseSubtitleDirective( idLexer& src, const idToken& directiveToken, const char* shaderName, int& subtitleTableIndexOut ) {
+	const char* tokenText = directiveToken.c_str();
+	const bool isCombatSubtitle = directiveToken.IcmpPrefix( "subtitlecombat" ) == 0;
+	const char* prefix = isCombatSubtitle ? "subtitlecombat" : "subtitle";
+	const int prefixLength = idStr::Length( prefix );
+	const char* channelSuffix = tokenText + prefixLength;
+	int subtitleNumber = 1;
+
+	if( channelSuffix[0] == '\0' ) {
+		// Prey retail shaders sometimes omit a suffix and implicitly target channel 1.
+		channelSuffix = "1";
+	}
+
+	for( const char* p = channelSuffix; *p != '\0'; ++p ) {
+		if( *p < '0' || *p > '9' ) {
+			src.Warning( "Subtitle token '%s' has an invalid channel suffix", tokenText );
+			return false;
+		}
+	}
+
+	subtitleNumber = atoi( channelSuffix );
+	if( subtitleNumber < 1 ) {
+		src.Warning( "Subtitle index %d out of range in '%s' (expected >= 1)", subtitleNumber, tokenText );
+		return false;
+	}
+
+	if( isCombatSubtitle ) {
+		if( subtitleNumber > 4 ) {
+			src.Warning( "Combat subtitle index %d out of range in '%s' (expected 1..4)", subtitleNumber, tokenText );
+			return false;
+		}
+		subtitleNumber += 3;
+	}
+
 	idToken subtitleDelay;
 	idToken subtitleString;
 
@@ -73,6 +106,11 @@ static bool ParseSubtitleDirective( idLexer& src ) {
 		src.Warning( "Missing subtitle string token" );
 		return false;
 	}
+
+	const float subtitleTime = subtitleDelay.GetFloatValue();
+	const int subtitleTableIndex = soundSystemLocal.GetSubtitleIndex( shaderName );
+	soundSystemLocal.SetSubtitleData( subtitleTableIndex, subtitleNumber, subtitleString.c_str(), subtitleTime, subtitleNumber );
+	subtitleTableIndexOut = subtitleTableIndex;
 
 	return true;
 }
@@ -226,7 +264,7 @@ bool idSoundShader::ParseShader( idLexer& src )
 	parms.shakes = 0;
 	parms.soundShaderFlags = 0;
 	parms.soundClass = 0;
-	parms.subIndex = 0;
+	parms.subIndex = -1;
 	parms.profanityIndex = 0;
 	parms.profanityDelay = 0.0f;
 	parms.profanityDuration = 0.0f;
@@ -506,10 +544,12 @@ bool idSoundShader::ParseShader( idLexer& src )
 		}
 		else if( token.IcmpPrefix( "subtitle" ) == 0 )
 		{
-			if( !ParseSubtitleDirective( src ) )
+			int subtitleTableIndex = -1;
+			if( !ParseSubtitleDirective( src, token, GetName(), subtitleTableIndex ) )
 			{
 				return false;
 			}
+			parms.subIndex = subtitleTableIndex;
 		}
 		// the wave files
 		else if( !token.Icmp( "leadin" ) )

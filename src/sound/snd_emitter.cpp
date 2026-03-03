@@ -47,6 +47,15 @@ static ID_INLINE float VolumeScaleToDB( const float volumeScale )
 	return LinearToDB( volumeScale );
 }
 
+static ID_INLINE bool IsProfanityCensorEnabled()
+{
+	if( idLib::cvarSystem == NULL )
+	{
+		return true;
+	}
+	return idLib::cvarSystem->GetCVarInteger( "com_profanity" ) == 0;
+}
+
 /*
 ================================================================================================
 
@@ -570,6 +579,38 @@ void idSoundEmitterLocal::OverrideParms( const soundShaderParms_t* base, const s
 	{
 		out->soundClass = base->soundClass;
 	}
+	if( over->subIndex )
+	{
+		out->subIndex = over->subIndex;
+	}
+	else
+	{
+		out->subIndex = base->subIndex;
+	}
+	if( over->profanityIndex )
+	{
+		out->profanityIndex = over->profanityIndex;
+	}
+	else
+	{
+		out->profanityIndex = base->profanityIndex;
+	}
+	if( over->profanityDelay )
+	{
+		out->profanityDelay = over->profanityDelay;
+	}
+	else
+	{
+		out->profanityDelay = base->profanityDelay;
+	}
+	if( over->profanityDuration )
+	{
+		out->profanityDuration = over->profanityDuration;
+	}
+	else
+	{
+		out->profanityDuration = base->profanityDuration;
+	}
 	if( over->frequencyShift )
 	{
 		out->frequencyShift = over->frequencyShift;
@@ -1009,6 +1050,23 @@ int idSoundEmitterLocal::StartSound( const idSoundShader* shader, const s_channe
 		// This channel will automatically end at this time
 		chan->endTime = chan->startTime + length + 100;
 	}
+
+	// Retail Prey profanity censoring: when active, apply a delayed fade to silence
+	// for authored bleep segments on the selected random sample.
+	if( IsProfanityCensorEnabled() && chanParms.profanityDuration > 0.0f && chanParms.profanityIndex == choice )
+	{
+		const int fadeDelayMS = Max( 0, SEC2MS( chanParms.profanityDelay ) );
+		const int fadeLengthMS = Max( 1, SEC2MS( chanParms.profanityDuration ) );
+		const int fadeStartTime = currentTime + fadeDelayMS;
+		const int fadeEndTime = fadeStartTime + fadeLengthMS;
+		const float fadeToDB = DB_SILENCE - VolumeScaleToDB( chan->parms.volume );
+
+		chan->volumeFade.fadeStartVolume = chan->volumeFade.GetVolume( fadeStartTime );
+		chan->volumeFade.fadeEndVolume = fadeToDB;
+		chan->volumeFade.fadeStartTime = fadeStartTime;
+		chan->volumeFade.fadeEndTime = fadeEndTime;
+	}
+
 	if( showStartSound )
 	{
 		if( loopingSample == NULL || leadinSample == loopingSample )
