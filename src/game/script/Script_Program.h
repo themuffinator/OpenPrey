@@ -261,7 +261,7 @@ template<class type, etype_t etype, class returnType>
 ID_INLINE void idScriptVariable<type, etype, returnType>::LinkTo( idScriptObject &obj, const char *name ) {
 	data = ( type * )obj.GetVariable( name, etype );
 	if ( !data ) {
-		idLib::common->Error( "Missing '%s' field in script object '%s'", name, obj.GetTypeName() );
+		idLib::Error( "Missing '%s' field in script object '%s'", name, obj.GetTypeName() );
 	}
 }
 
@@ -340,7 +340,6 @@ typedef union varEval_s {
 	int 					*intPtr;
 	byte					*bytePtr;
 	int 					*entityNumberPtr;
-	uintptr_t				pointerToken;
 	int						virtualFunction;
 	int						jumpOffset;
 	int						stackOffset;		// offset in stack for local variables

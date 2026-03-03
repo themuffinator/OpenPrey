@@ -472,7 +472,7 @@ cmHandle_t idClipModel::Handle( void ) const {
 	} else {
 		// this happens in multiplayer on the combat models
 		gameLocal.Warning( "idClipModel::Handle: clip model %d on '%s' (%x) is not a collision or trace model", id, entity->name.c_str(), entity->entityNumber );
-		return 0;
+		return NULL;
 	}
 }
 

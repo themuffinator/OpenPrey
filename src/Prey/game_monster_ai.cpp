@@ -355,8 +355,14 @@ void hhMonsterAI::Think( void ) {
 
 	CrashLand( oldOrigin, oldVelocity );
 
-	// Keep no-AAS visualization out of normal gameplay. Missing AAS still logs
-	// through SetAAS(), but we no longer render floating '?' markers.
+	if(health > 0) {
+		idStr tmp;	
+		if(ai_showNoAAS.GetBool() && spawnArgs.GetString("use_aas", "", tmp) && spawnArgs.GetBool("noaas_warning","1")) {			
+			if(!aas) {
+				gameRenderWorld->DrawText("?", this->GetEyePosition() + idVec3(0.0f, 0.0f, 12.0f), 0.75f, colorYellow, gameLocal.GetLocalPlayer()->viewAngles.ToMat3());				
+			}
+		}
+	}
 
 	if ( !AI_DEAD && bCanFall && !IsHidden() && !fl.isTractored ) {
 		if ( physicsObj.HasContacts() || physicsObj.GetLinearVelocity().LengthSqr() < 4 ) {

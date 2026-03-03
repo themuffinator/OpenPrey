@@ -593,7 +593,6 @@ public:
 	idRenderModel				*SetModel( const char *modelname );
 	idRenderModel				*ModelHandle( void ) const;
 	const idDeclModelDef		*ModelDef( void ) const;
-	bool						IsAnimatedModel( void ) const { return modelDef != NULL; }
 
 	void						ForceUpdate( void );
 	void						ClearForceUpdate( void );

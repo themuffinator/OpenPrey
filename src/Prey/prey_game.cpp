@@ -27,10 +27,6 @@ void hhGameLocal::Init( void ) {
 
 	idGameLocal::Init();
 
-	// Force-disable debug/player-assist visuals that break retail presentation.
-	ai_showNoAAS.SetBool( false );
-	cvarSystem->SetCVarBool( "g_enableLighter", false );
-
 	dwWorldClipModel = NULL;
 #if _HH_INLINED_PROC_CLIPMODELS
 	inlinedProcClipModels.Clear(); //HUMANHEAD rww

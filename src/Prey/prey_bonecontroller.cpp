@@ -104,7 +104,7 @@ void hhBoneController::Update( int iCurrentTime ) {
 hhBoneController::TurnTo
 ================
 */
-bool hhBoneController::TurnTo( idAngles &Target ) {
+bool hhBoneController::TurnTo( const idAngles &Target ) {
 	m_IdealAng = Target;
 	bool bClampAngles = !ClampAngles();
 
@@ -120,7 +120,7 @@ bool hhBoneController::TurnTo( idAngles &Target ) {
 hhBoneController::AimAt
 ================
 */
-bool hhBoneController::AimAt( idVec3 &Target ) {
+bool hhBoneController::AimAt( const idVec3 &Target ) {
 	idVec3 dir;
 	idVec3 localDir;
 
@@ -173,7 +173,7 @@ bool hhBoneController::ClampAngles( void ) {
 hhBoneController::SetRotationFactor
 =====================
 */
-void hhBoneController::SetRotationFactor(const idAngles &RotationFactor) {
+void hhBoneController::SetRotationFactor( const idAngles& RotationFactor ) {
 	m_Factor = RotationFactor;
 }
 
@@ -244,4 +244,6 @@ void hhBoneController::Restore( idRestoreGame *savefile ) {
 	savefile->ReadAngles( m_TurnRate );
 	savefile->ReadObject( reinterpret_cast<idClass *&> ( m_pOwner ) );
 }
+
+
 

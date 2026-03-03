@@ -17,7 +17,7 @@
 #define PROJECT_REPO					"https://github.com/themuffinator/OpenPrey"
 
 #define GAME_NAME						PROJECT_NAME			// appears on window titles and errors
-#define GAME_ICON						"q4icon.bmp"
+#define GAME_ICON						"assets/icons/prey.ico"
 
 #define ENGINE_VERSION					PROJECT_NAME "-" PROJECT_VERSION
 

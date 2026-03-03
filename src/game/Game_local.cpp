@@ -55,16 +55,11 @@ hhGameLocal					gameLocal;
 //#endif
 idGame *					game = &gameLocal;	// statically pointed at an idGameLocal
 
-int *OpenPrey_SpawnIdArray() {
-	return gameLocal.spawnIds;
-}
-
-idEntity **OpenPrey_EntityArray() {
-	return gameLocal.entities;
-}
-
-int OpenPrey_EntityNumber( const idEntity *ent ) {
-	return ent->entityNumber;
+int OpenPrey_GetSpawnIdForEntity( const idEntity *ent ) {
+	if ( ent == NULL ) {
+		return 0;
+	}
+	return ( OpenPrey_GetSpawnId( ent->entityNumber ) << GENTITYNUM_BITS_PLUSCENT ) | ent->entityNumber;
 }
 
 #ifdef HUMANHEAD
@@ -1470,7 +1465,7 @@ bool idGameLocal::InitFromSaveGame( const char *mapName, idRenderWorld *renderWo
 		if ( !idGameLocal::InhibitEntitySpawn( mapEnt->epairs ) ) { // HUMANHEAD mdl:  Need this to call the original function
 			CacheDictionaryMedia( &mapEnt->epairs );
 			const char *classname = mapEnt->epairs.GetString( "classname" );
-			if ( classname != NULL && classname[0] != '\0' ) {
+			if ( classname[0] != '\0' ) {
 				FindEntityDef( classname, false );
 			}
 		}
@@ -1932,7 +1927,7 @@ void idGameLocal::GetShakeSounds( const idDict *dict ) {
 	idStr soundName;
 
 	soundShaderName = dict->GetString( "s_shader" );
-	if ( soundShaderName != NULL && soundShaderName[0] != '\0' && dict->GetFloat( "s_shakes" ) != 0.0f ) {
+	if ( soundShaderName[0] != '\0' && dict->GetFloat( "s_shakes" ) != 0.0f ) {
 		soundShader = declManager->FindSound( soundShaderName );
 
 		for ( int i = 0; i < soundShader->GetNumSounds(); i++ ) {
@@ -2860,67 +2855,20 @@ gameReturn_t idGameLocal::RunFrame( const usercmd_t *clientCmds ) {
 
 /*
 ====================
-idGameLocal::GetScreenAspectRatio
-====================
-*/
-float idGameLocal::GetScreenAspectRatio( void ) const {
-	int screenWidth = ( renderSystem != NULL ) ? renderSystem->GetScreenWidth() : 0;
-	int screenHeight = ( renderSystem != NULL ) ? renderSystem->GetScreenHeight() : 0;
-
-	if ( screenWidth > 0 && screenHeight > 0 ) {
-		return ( float )screenWidth / ( float )screenHeight;
-	}
-
-	if ( cvarSystem != NULL ) {
-		const int mode = cvarSystem->GetCVarInteger( "r_mode" );
-		if ( mode == -1 ) {
-			screenWidth = cvarSystem->GetCVarInteger( "r_customWidth" );
-			screenHeight = cvarSystem->GetCVarInteger( "r_customHeight" );
-		} else {
-			screenWidth = cvarSystem->GetCVarInteger( "r_windowWidth" );
-			screenHeight = cvarSystem->GetCVarInteger( "r_windowHeight" );
-		}
-		if ( screenWidth > 0 && screenHeight > 0 ) {
-			return ( float )screenWidth / ( float )screenHeight;
-		}
-
-		screenWidth = cvarSystem->GetCVarInteger( "r_customWidth" );
-		screenHeight = cvarSystem->GetCVarInteger( "r_customHeight" );
-		if ( screenWidth > 0 && screenHeight > 0 ) {
-			return ( float )screenWidth / ( float )screenHeight;
-		}
-	}
-
-	return 4.0f / 3.0f;
-}
-
-/*
-====================
 idGameLocal::CalcFov
 
-Calculates the horizontal and vertical field of view based on a horizontal field of view and custom aspect ratio
+Calculates the horizontal and vertical field of view based on a horizontal field of view and current render aspect ratio.
 ====================
 */
 void idGameLocal::CalcFov( float base_fov, float &fov_x, float &fov_y ) const {
 	float	x;
 	float	y;
-	const float referenceAspect = 4.0f / 3.0f;
-	const float aspectRatio = idMath::ClampFloat( 0.1f, 10.0f, GetScreenAspectRatio() );
-
-// RAVEN BEGIN
-// jnewquist: Option to adjust vertical fov instead of horizontal for non 4:3 modes
-	if ( g_fixedHorizFOV.GetBool() ) {
-		x = aspectRatio / idMath::Tan( base_fov / 360.0f * idMath::PI );
-		y = idMath::ATan( 1.0f, x );
-		fov_y = y * 360.0f / idMath::PI;
-		fov_x = base_fov;
-		return;
-	}
-// RAVEN END
-
-	// first, calculate the vertical fov from the legacy 4:3 baseline.
-	x = referenceAspect / idMath::Tan( base_fov / 360.0f * idMath::PI );
-	y = idMath::ATan( 1.0f, x );
+	float	ratio_x;
+	float	ratio_y;
+	
+	// first, calculate the vertical fov based on a 640x480 view
+	x = 640.0f / tan( base_fov / 360.0f * idMath::PI );
+	y = atan2( 480.0f, x );
 	fov_y = y * 360.0f / idMath::PI;
 
 	// FIXME: somehow, this is happening occasionally
@@ -2930,18 +2878,21 @@ void idGameLocal::CalcFov( float base_fov, float &fov_x, float &fov_y ) const {
 		Error( "idGameLocal::CalcFov: bad result" );
 	}
 
-	if ( idMath::Fabs( aspectRatio - referenceAspect ) < 0.001f ) {
-		fov_x = base_fov;
-		return;
+	ratio_x = ( renderSystem != NULL ) ? static_cast<float>( renderSystem->GetScreenWidth() ) : 0.0f;
+	ratio_y = ( renderSystem != NULL ) ? static_cast<float>( renderSystem->GetScreenHeight() ) : 0.0f;
+	if ( ratio_x <= 0.0f || ratio_y <= 0.0f ) {
+		// Dedicated server and early init paths can report 0x0; assume the 4:3 gameplay baseline.
+		ratio_x = 4.0f;
+		ratio_y = 3.0f;
 	}
 
-	y = 1.0f / idMath::Tan( fov_y / 360.0f * idMath::PI );
-	fov_x = idMath::ATan( aspectRatio, y ) * 360.0f / idMath::PI;
+	y = ratio_y / tan( fov_y / 360.0f * idMath::PI );
+	fov_x = atan2( ratio_x, y ) * 360.0f / idMath::PI;
 
 	if ( fov_x < base_fov ) {
 		fov_x = base_fov;
-		x = aspectRatio / idMath::Tan( fov_x / 360.0f * idMath::PI );
-		fov_y = idMath::ATan( 1.0f, x ) * 360.0f / idMath::PI;
+		x = ratio_x / tan( fov_x / 360.0f * idMath::PI );
+		fov_y = atan2( ratio_y, x ) * 360.0f / idMath::PI;
 	}
 
 	// FIXME: somehow, this is happening occasionally
@@ -4384,11 +4335,11 @@ void idGameLocal::KillBoxMasked( idEntity *ent, int clipMask, bool catch_telepor
 idGameLocal::RequirementMet
 ================
 */
-bool idGameLocal::RequirementMet( idEntity *activator, const idStr &requirements, int removeItem ) {
-	if ( requirements.Length() ) {
+bool idGameLocal::RequirementMet( idEntity *activator, const idStr &requiredItem, int removeItem ) {
+	if ( requiredItem.Length() ) {
 		if ( activator->IsType( idPlayer::Type ) ) {
 			idPlayer *player = static_cast<idPlayer *>(activator);
-			idDict *item = player->FindInventoryItem( requirements );
+			idDict *item = player->FindInventoryItem( requiredItem );
 			if ( item ) {
 				if ( removeItem ) {
 					player->RemoveInventoryItem( item );
@@ -4918,7 +4869,7 @@ void idGameLocal::SpreadLocations() {
 			Error( "idGameLocal::SpreadLocations: areaNum >= gameRenderWorld->NumAreas()" );
 		}
 		if ( locationEntities[areaNum] ) {
-			DPrintf( "location entity '%s' overlaps '%s'\n", ent->spawnArgs.GetString( "name" ),
+			Warning( "location entity '%s' overlaps '%s'", ent->spawnArgs.GetString( "name" ),
 				locationEntities[areaNum]->spawnArgs.GetString( "name" ) );
 			continue;
 		}

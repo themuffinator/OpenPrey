@@ -334,13 +334,7 @@ void hhDebrisSpawner::SpawnFX() {
 
 void hhDebrisSpawner::SpawnDecals( void ) {
 	const int DIR_COUNT  = 5;
-	idVec3 dir[DIR_COUNT] = {
-		idVec3( 1, 0, 0 ),
-		idVec3( -1, 0, 0 ),
-		idVec3( 0, 0, -1 ),
-		idVec3( 0, 1, 0 ),
-		idVec3( 0, -1, 0 )
-	};
+	idVec3 dir[DIR_COUNT] = { ( 1, 0, 0 ), ( -1, 0, 0 ), ( 0, 0, -1 ), ( 0, 1, 0 ), ( 0, -1, 0) };
 
 	// do blood splats
 	float size = spawnArgs.GetFloat( "decal_size", "96" );

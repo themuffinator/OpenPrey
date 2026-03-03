@@ -44,7 +44,7 @@ protected:
 	void				Event_ClearFx( void );
 
 protected:
-	// HUMANHEAD
+	// HUMANHEAD 
 	hhFxInfo				fxInfo;
 	bool					setFxInfo;
 	bool					removeWhenDone;

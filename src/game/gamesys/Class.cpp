@@ -1001,7 +1001,7 @@ bool idClass::ProcessEventArgPtr( const idEventDef *ev, intptr_t *data ) {
 	assert( idEvent::initialized );
 
 	if ( g_debugTriggers.GetBool() && ( ev == &EV_Activate ) && IsType( idEntity::Type ) ) {
-		const idEntity *ent = *reinterpret_cast<idEntity **>( data );
+		const idEntity *ent = reinterpret_cast<idEntity *>( data[ 0 ] );
 		gameLocal.Printf( "%d: '%s' activated by '%s'\n", gameLocal.framenum, static_cast<idEntity *>( this )->GetName(), ent ? ent->GetName() : "NULL" );
 	}
 

@@ -335,48 +335,6 @@ void idInterpreter::SetThread( idThread *pThread ) {
 
 /*
 ================
-idInterpreter::ResolveFieldPointer
-================
-*/
-byte *idInterpreter::ResolveFieldPointer( varEval_t &pointerVar, int valueSize ) {
-	if ( !pointerVar.evalPtr || valueSize <= 0 ) {
-		return NULL;
-	}
-
-#if defined( _WIN64 )
-	const uintptr_t pointerToken = pointerVar.evalPtr->pointerToken;
-	if ( pointerToken == 0 ) {
-		return NULL;
-	}
-
-	const int entnum = static_cast<int>( pointerToken >> 32 );
-	const int ptrOffset = static_cast<int>( pointerToken & 0xFFFFFFFFu );
-	idScriptObject *obj = GetScriptObject( entnum );
-	if ( !obj ) {
-		pointerVar.evalPtr->pointerToken = 0;
-		return NULL;
-	}
-
-	idTypeDef *objType = obj->GetTypeDef();
-	if ( !objType ) {
-		pointerVar.evalPtr->pointerToken = 0;
-		return NULL;
-	}
-
-	const int objSize = objType->Size();
-	if ( ptrOffset < 0 || valueSize > objSize || ptrOffset > objSize - valueSize ) {
-		pointerVar.evalPtr->pointerToken = 0;
-		return NULL;
-	}
-
-	return &obj->data[ ptrOffset ];
-#else
-	return pointerVar.evalPtr->bytePtr;
-#endif
-}
-
-/*
-================
 idInterpreter::CurrentLine
 ================
 */
@@ -929,7 +887,7 @@ void idInterpreter::CallSysEvent( const function_t *func, int argsize ) {
 		switch( format[ i ] ) {
 		case D_EVENT_INTEGER :
 			source.intPtr = ( int * )&localstack[ start + pos ];
-			data[ i ] = int( *source.floatPtr );
+			*( int * )&data[ i ] = int( *source.floatPtr );
 			break;
 
 		case D_EVENT_FLOAT :
@@ -1775,8 +1733,7 @@ bool idInterpreter::Execute( void ) {
 
 		case OP_STOREP_F:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, sizeof( float ) );
-			if ( var.floatPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->floatPtr ) {
 				var_a = GetVariable( st->a );
 
 				//HUMANHEAD rww - float debugging
@@ -1785,133 +1742,121 @@ bool idInterpreter::Execute( void ) {
 #endif
 				//HUMANHEAD END
 
-				*var.floatPtr = *var_a.floatPtr;
+				*var_b.evalPtr->floatPtr = *var_a.floatPtr;
 			}
 			break;
 
 		case OP_STOREP_ENT:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, sizeof( int ) );
-			if ( var.entityNumberPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->entityNumberPtr ) {
 				var_a = GetVariable( st->a );
-				*var.entityNumberPtr = *var_a.entityNumberPtr;
+				*var_b.evalPtr->entityNumberPtr = *var_a.entityNumberPtr;
 			}
 			break;
 
 		case OP_STOREP_FLD:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, sizeof( int ) );
-			if ( var.intPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->intPtr ) {
 				var_a = GetVariable( st->a );
-				*var.intPtr = *var_a.intPtr;
+				*var_b.evalPtr->intPtr = *var_a.intPtr;
 			}
 			break;
 
 		case OP_STOREP_BOOL:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, sizeof( int ) );
-			if ( var.intPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->intPtr ) {
 				var_a = GetVariable( st->a );
-				*var.intPtr = *var_a.intPtr;
+				*var_b.evalPtr->intPtr = *var_a.intPtr;
 			}
 			break;
 
 		case OP_STOREP_S:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, MAX_STRING_LEN );
-			if ( var.stringPtr ) {
-				idStr::Copynz( var.stringPtr, GetString( st->a ), MAX_STRING_LEN );
+			if ( var_b.evalPtr && var_b.evalPtr->stringPtr ) {
+				idStr::Copynz( var_b.evalPtr->stringPtr, GetString( st->a ), MAX_STRING_LEN );
 			}
 			break;
 
 		case OP_STOREP_V:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, sizeof( idVec3 ) );
-			if ( var.vectorPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->vectorPtr ) {
 				var_a = GetVariable( st->a );
-				*var.vectorPtr = *var_a.vectorPtr;
+				*var_b.evalPtr->vectorPtr = *var_a.vectorPtr;
 			}
 			break;
 		
 		case OP_STOREP_FTOS:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, MAX_STRING_LEN );
-			if ( var.stringPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->stringPtr ) {
 				var_a = GetVariable( st->a );
-				idStr::Copynz( var.stringPtr, FloatToString( *var_a.floatPtr ), MAX_STRING_LEN );
+				idStr::Copynz( var_b.evalPtr->stringPtr, FloatToString( *var_a.floatPtr ), MAX_STRING_LEN );
 			}
 			break;
 
 		case OP_STOREP_BTOS:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, MAX_STRING_LEN );
-			if ( var.stringPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->stringPtr ) {
 				var_a = GetVariable( st->a );
 				if ( *var_a.floatPtr != 0.0f ) {
-					idStr::Copynz( var.stringPtr, "true", MAX_STRING_LEN );
+					idStr::Copynz( var_b.evalPtr->stringPtr, "true", MAX_STRING_LEN );
 				} else {
-					idStr::Copynz( var.stringPtr, "false", MAX_STRING_LEN );
+					idStr::Copynz( var_b.evalPtr->stringPtr, "false", MAX_STRING_LEN );
 				}
 			}
 			break;
 
 		case OP_STOREP_VTOS:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, MAX_STRING_LEN );
-			if ( var.stringPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->stringPtr ) {
 				var_a = GetVariable( st->a );
-				idStr::Copynz( var.stringPtr, var_a.vectorPtr->ToString(), MAX_STRING_LEN );
+				idStr::Copynz( var_b.evalPtr->stringPtr, var_a.vectorPtr->ToString(), MAX_STRING_LEN );
 			}
 			break;
 
 		case OP_STOREP_FTOBOOL:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, sizeof( int ) );
-			if ( var.intPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->intPtr ) {
 				var_a = GetVariable( st->a );
 				if ( *var_a.floatPtr != 0.0f ) {
-					*var.intPtr = 1;
+					*var_b.evalPtr->intPtr = 1;
 				} else {
-					*var.intPtr = 0;
+					*var_b.evalPtr->intPtr = 0;
 				}
 			}
 			break;
 
 		case OP_STOREP_BOOLTOF:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, sizeof( float ) );
-			if ( var.floatPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->floatPtr ) {
 				var_a = GetVariable( st->a );
-				*var.floatPtr = static_cast<float>( *var_a.intPtr );
+				*var_b.evalPtr->floatPtr = static_cast<float>( *var_a.intPtr );
 			}
 			break;
 
 		case OP_STOREP_OBJ:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, sizeof( int ) );
-			if ( var.entityNumberPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->entityNumberPtr ) {
 				var_a = GetVariable( st->a );
-				*var.entityNumberPtr = *var_a.entityNumberPtr;
+				*var_b.evalPtr->entityNumberPtr = *var_a.entityNumberPtr;
 			}
 			break;
 
 		case OP_STOREP_OBJENT:
 			var_b = GetVariable( st->b );
-			var.bytePtr = ResolveFieldPointer( var_b, sizeof( int ) );
-			if ( var.entityNumberPtr ) {
+			if ( var_b.evalPtr && var_b.evalPtr->entityNumberPtr ) {
 				var_a = GetVariable( st->a );
 				obj = GetScriptObject( *var_a.entityNumberPtr );
 				if ( !obj ) {
-					*var.entityNumberPtr = 0;
+					*var_b.evalPtr->entityNumberPtr = 0;
 
 				// st->b points to type_pointer, which is just a temporary that gets its type reassigned, so we store the real type in st->c
 				// so that we can do a type check during run time since we don't know what type the script object is at compile time because it
 				// comes from an entity
 				} else if ( !obj->GetTypeDef()->Inherits( st->c->TypeDef() ) ) {
 					//Warning( "object '%s' cannot be converted to '%s'", obj->GetTypeName(), st->c->TypeDef()->Name() );
-					*var.entityNumberPtr = 0;
+					*var_b.evalPtr->entityNumberPtr = 0;
 				} else {
-					*var.entityNumberPtr = *var_a.entityNumberPtr;
+					*var_b.evalPtr->entityNumberPtr = *var_a.entityNumberPtr;
 				}
 			}
 			break;
@@ -1920,20 +1865,10 @@ bool idInterpreter::Execute( void ) {
 			var_a = GetVariable( st->a );
 			var_c = GetVariable( st->c );
 			obj = GetScriptObject( *var_a.entityNumberPtr );
-			if ( var_c.evalPtr ) {
-#if defined( _WIN64 )
-				if ( obj ) {
-					var_c.evalPtr->pointerToken = ( static_cast<uintptr_t>( *var_a.entityNumberPtr ) << 32 ) | static_cast<uint32>( st->b->value.ptrOffset );
-				} else {
-					var_c.evalPtr->pointerToken = 0;
-				}
-#else
-				if ( obj ) {
-					var_c.evalPtr->bytePtr = &obj->data[ st->b->value.ptrOffset ];
-				} else {
-					var_c.evalPtr->bytePtr = NULL;
-				}
-#endif
+			if ( obj ) {
+				var_c.evalPtr->bytePtr = &obj->data[ st->b->value.ptrOffset ];
+			} else {
+				var_c.evalPtr->bytePtr = NULL;
 			}
 			break;
 
@@ -2054,9 +1989,7 @@ bool idInterpreter::Execute( void ) {
 
 		case OP_PUSH_V:
 			var_a = GetVariable( st->a );
-			Push( *reinterpret_cast<int *>( &var_a.vectorPtr->x ) );
-			Push( *reinterpret_cast<int *>( &var_a.vectorPtr->y ) );
-			Push( *reinterpret_cast<int *>( &var_a.vectorPtr->z ) );
+			PushVector( *var_a.vectorPtr );
 			break;
 
 		case OP_PUSH_OBJ:

@@ -59,10 +59,6 @@ class idThread;
 class idEditEntities;
 class idLocationEntity;
 
-int *OpenPrey_SpawnIdArray();
-idEntity **OpenPrey_EntityArray();
-int OpenPrey_EntityNumber( const idEntity *ent );
-
 #define	MAX_CLIENTS				32
 #define	GENTITYNUM_BITS			12
 #define	MAX_GENTITIES			(1<<GENTITYNUM_BITS)
@@ -237,6 +233,10 @@ private:
 
 //============================================================================
 
+int						OpenPrey_GetSpawnId( int index );
+idEntity *				OpenPrey_GetEntity( int index );
+int						OpenPrey_GetSpawnIdForEntity( const idEntity *ent );
+
 template< class type >
 class idEntityPtr {
 public:
@@ -342,10 +342,8 @@ ID_INLINE idEntityPtr<type> &idEntityPtr<type>::Assign( const idEntity *ent ) {
 	if ( ent == NULL ) {
 		spawnId = 0;
 	} else {
-		int *spawnIds = OpenPrey_SpawnIdArray();
-		const int entityNum = OpenPrey_EntityNumber( ent );
 		//HUMANHEAD rww - take cent bits into account
-		spawnId = ( spawnIds[ entityNum ] << GENTITYNUM_BITS_PLUSCENT ) | entityNum;
+		spawnId = OpenPrey_GetSpawnIdForEntity( ent );
 	}
 	return *this;
 }
@@ -365,7 +363,7 @@ ID_INLINE idEntityPtr<type> &idEntityPtr<type>::operator=( type *ent ) {
 	if ( ent == NULL ) {
 		spawnId = 0;
 	} else {
-		spawnId = ( gameLocal.spawnIds[ent->entityNumber] << GENTITYNUM_BITS ) | ent->entityNumber;
+		spawnId = ( OpenPrey_GetSpawnId( ent->entityNumber ) << GENTITYNUM_BITS ) | ent->entityNumber;
 	}
 	return *this;
 }
@@ -377,9 +375,8 @@ ID_INLINE bool idEntityPtr<type>::SetSpawnId( int id ) {
 	if ( id == spawnId ) {
 		return false;
 	}
-	int *spawnIds = OpenPrey_SpawnIdArray();
 	//HUMANHEAD rww - take cent bits into account
-	if ( ( id >> GENTITYNUM_BITS_PLUSCENT ) == spawnIds[ id & ( ( 1 << GENTITYNUM_BITS_PLUSCENT ) - 1 ) ] ) {
+	if ( ( id >> GENTITYNUM_BITS_PLUSCENT ) == OpenPrey_GetSpawnId( id & ( ( 1 << GENTITYNUM_BITS_PLUSCENT ) - 1 ) ) ) {
 		spawnId = id;
 		return true;
 	}
@@ -388,19 +385,16 @@ ID_INLINE bool idEntityPtr<type>::SetSpawnId( int id ) {
 
 template< class type >
 ID_INLINE bool idEntityPtr<type>::IsValid( void ) const {
-	int *spawnIds = OpenPrey_SpawnIdArray();
 	//HUMANHEAD rww - take cent bits into account
-	return ( spawnIds[ spawnId & ( ( 1 << GENTITYNUM_BITS_PLUSCENT ) - 1 ) ] == ( spawnId >> GENTITYNUM_BITS_PLUSCENT ) );
+	return ( OpenPrey_GetSpawnId( spawnId & ( ( 1 << GENTITYNUM_BITS_PLUSCENT ) - 1 ) ) == ( spawnId >> GENTITYNUM_BITS_PLUSCENT ) );
 }
 
 template< class type >
 ID_INLINE type *idEntityPtr<type>::GetEntity( void ) const {
-	int *spawnIds = OpenPrey_SpawnIdArray();
-	idEntity **entities = OpenPrey_EntityArray();
 	//HUMANHEAD rww - take cent bits into account
 	int entityNum = spawnId & ( ( 1 << GENTITYNUM_BITS_PLUSCENT ) - 1 );
-	if ( ( spawnIds[ entityNum ] == ( spawnId >> GENTITYNUM_BITS_PLUSCENT ) ) ) {
-		return static_cast<type *>( entities[ entityNum ] );
+	if ( ( OpenPrey_GetSpawnId( entityNum ) == ( spawnId >> GENTITYNUM_BITS_PLUSCENT ) ) ) {
+		return static_cast<type *>( OpenPrey_GetEntity( entityNum ) );
 	}
 	return NULL;
 }
@@ -597,7 +591,7 @@ public:
 	void					RegisterEntity( idEntity *ent );
 	void					UnregisterEntity( idEntity *ent );
 
-	bool					RequirementMet( idEntity *activator, const idStr &requirements, int removeItem );
+	bool					RequirementMet( idEntity *activator, const idStr &requiredItem, int removeItem );
 
 	virtual					//HUMANHEAD jsh made virtual
 	void					AlertAI( idEntity *ent );
@@ -609,7 +603,6 @@ public:
 	void					SetCamera( idCamera *cam );
 	idCamera *				GetCamera( void ) const;
 	bool					SkipCinematic( void );
-	float					GetScreenAspectRatio( void ) const;
 	void					CalcFov( float base_fov, float &fov_x, float &fov_y ) const;
 
 	void					AddEntityToHash( const char *name, idEntity *ent );
@@ -677,13 +670,7 @@ public:
 	virtual void			PrintMemInfo( MemInfo_t *mi );
 
 // HUMANHEAD pdm: Support for level appending
-	bool					DeathwalkMapLoaded() const {
-#if DEATHWALK_AUTOLOAD
-		return bShouldAppend;
-#else
-		return false;
-#endif
-	}
+	bool					DeathwalkMapLoaded() const	{	return bShouldAppend;	}
 #if DEATHWALK_AUTOLOAD
 	bool					bShouldAppend;			// Taken from serverinfo
 protected:
@@ -905,6 +892,14 @@ protected:	// HUMANHEAD
 //#else	// HUMANHEAD
 //extern idGameLocal			gameLocal;
 //#endif	// HUMANHEAD
+
+ID_INLINE int OpenPrey_GetSpawnId( int index ) {
+	return gameLocal.spawnIds[ index ];
+}
+
+ID_INLINE idEntity *OpenPrey_GetEntity( int index ) {
+	return gameLocal.entities[ index ];
+}
 
 extern idAnimManager		animationLib;
 

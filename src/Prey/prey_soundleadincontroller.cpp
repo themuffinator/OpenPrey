@@ -3,17 +3,6 @@
 
 #include "prey_local.h"
 
-namespace {
-ID_INLINE int ShaderVolumeToDb( const idSoundShader *shader ) {
-	if ( shader == NULL ) {
-		return 0;
-	}
-
-	const soundShaderParms_t *parms = shader->GetParms();
-	return parms ? idMath::FtoiFast( parms->volume ) : 0;
-}
-}
-
 CLASS_DECLARATION( idClass, hhSoundLeadInController )
 END_CLASS
 
@@ -152,7 +141,7 @@ int hhSoundLeadInController::StartSound( const s_channelType leadChannel, const 
 
 	if( leadInShader ) {
 		owner->StartSoundShader( leadInShader, leadChannel, 0, broadcast, &length );
-		StartFade( leadInShader, leadChannel, endTime, startTime, ShaderVolumeToDb( leadInShader ), length );
+		StartFade( leadInShader, leadChannel, endTime, startTime, static_cast<int>( leadInShader->GetParms() ? leadInShader->GetParms()->volume : 0.0f ), length );
 
 		startTime = gameLocal.GetTime();
 		endTime = startTime + length;
@@ -160,7 +149,7 @@ int hhSoundLeadInController::StartSound( const s_channelType leadChannel, const 
 
 	if (iLoopOnlyOnLocal == -1 || iLoopOnlyOnLocal == gameLocal.localClientNum) { //rww - for spirit music and whatever else needs it
 		owner->StartSoundShader( loopShader, loopChannel, 0, broadcast, NULL );
-		StartFade( loopShader, loopChannel, startTime, endTime, ShaderVolumeToDb( loopShader ), length );
+		StartFade( loopShader, loopChannel, startTime, endTime, static_cast<int>( loopShader->GetParms() ? loopShader->GetParms()->volume : 0.0f ), length );
 	}
 
 	//rww - for networking
@@ -226,12 +215,13 @@ HUMANHEAD: aob
 ================
 */
 void hhSoundLeadInController::StartFade( const idSoundShader* shader, const s_channelType channel, int start, int end, int finaldBVolume, int duration ) {
-	(void)shader;
-	(void)channel;
-	(void)start;
-	(void)end;
-	(void)finaldBVolume;
-	(void)duration;
+/*
+	float scale = CalculateScale( gameLocal.GetTime(), start, end );
+
+	scale *= hhMath::dB2Scale( shader->GetVolume() );
+	owner->HH_SetSoundVolume( scale, channel );
+	owner->FadeSoundShader( finaldBVolume, duration, channel );
+*/
 }
 
 /*

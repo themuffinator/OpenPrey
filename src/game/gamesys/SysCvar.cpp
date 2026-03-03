@@ -56,7 +56,7 @@ idCVar ai_hideSkipThink(			"ai_hideSkipThink",				"1",			CVAR_GAME | CVAR_INTEGE
 idCVar g_debugAFs(					"g_debugAFs",					"0",			CVAR_GAME | CVAR_INTEGER,		"print out info on what the ragdolls are doing" );
 idCVar g_debugFX(					"g_debugFX",					"0",			CVAR_GAME | CVAR_BOOL,			"" );
 idCVar g_showDormant(				"g_showDormant",				"0",			CVAR_GAME | CVAR_BOOL,			"1= Prints out msgs when an entity goes dormant" );
-idCVar ai_showNoAAS(				"ai_showNoAAS",					"0",			CVAR_GAME | CVAR_BOOL | CVAR_ARCHIVE,	"1= Show when monsters do not have AAS available (shows a ?)" );
+idCVar ai_showNoAAS(				"ai_showNoAAS",					"1",			CVAR_GAME | CVAR_BOOL | CVAR_ARCHIVE,	"1= Show when monsters do not have AAS available (shows a ?)" );
 idCVar ai_printSpeech(				"ai_printSpeech",				"0",			CVAR_GAME | CVAR_BOOL | CVAR_ARCHIVE,	"1= Draw hunter speech sounds" );
 idCVar ai_skipSpeech(				"ai_skipSpeech",				"0",			CVAR_GAME | CVAR_BOOL,			"1= Do not use the AI speech system" );
 idCVar ai_skipThink(				"ai_skipThink",					"0",			CVAR_GAME | CVAR_BOOL,			"1= Do not execute hhAI::Think() fxn" );
@@ -145,9 +145,6 @@ idCVar ui_modelNum(					"ui_modelNum",				"0",			CVAR_GAME | CVAR_USERINFO | CVA
 
 // change anytime vars
 idCVar developer(					"developer",				"0",			CVAR_GAME | CVAR_BOOL, "" );
-
-// jnewquist: vertical stretch for letterboxed cinematics authored for 4:3 aspect
-idCVar g_fixedHorizFOV(				"r_fixedHorizFOV",			"0",			CVAR_RENDERER | CVAR_BOOL, "vertical stretch for letterboxed cinematics authored for 4:3 aspect" );
 
 idCVar g_cinematic(					"g_cinematic",				"1",			CVAR_GAME | CVAR_BOOL, "skips updating entities that aren't marked 'cinematic' '1' during cinematics" );
 idCVar g_cinematicMaxSkipTime(		"g_cinematicMaxSkipTime",	"600",			CVAR_GAME | CVAR_FLOAT, "# of seconds to allow game to run when skipping cinematic.  prevents lock-up when cinematic doesn't end.", 0, 3600 );

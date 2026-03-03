@@ -350,6 +350,7 @@ typedef struct sizeEstimate_s {
 
 
 class idAASFile {
+	friend class idAASLocal;
 public:
 	virtual 					~idAASFile(void) {}
 

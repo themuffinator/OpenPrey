@@ -16,7 +16,7 @@ hhThread::hhThread( idInterpreter *source, const function_t *func, int args ) : 
 hhThread::PushParm
 ================
 */
-void hhThread::PushParm( int value ) {
+void hhThread::PushParm( intptr_t value ) {
 	interpreter.Push( value );
 }
 
@@ -26,7 +26,7 @@ hhThread::PushString
 ================
 */
 void hhThread::PushString( const char *text ) {
-	interpreter.PushStringValue( text ? text : "" );
+	interpreter.PushString( text );
 }
 
 /*
@@ -35,9 +35,7 @@ hhThread::PushFloat
 ================
 */
 void hhThread::PushFloat( float value ) {
-	int packed = 0;
-	memcpy( &packed, &value, sizeof( packed ) );
-	PushParm( packed );
+	PushParm( *reinterpret_cast<int *>( &value ) );
 }
 
 /*
@@ -46,7 +44,7 @@ hhThread::PushInt
 ================
 */
 void hhThread::PushInt( int value ) {
-	PushParm( value );
+	PushParm( static_cast<intptr_t>( value ) );
 }
 
 /*
@@ -55,12 +53,7 @@ hhThread::PushVector
 ================
 */
 void hhThread::PushVector( const idVec3 &vec ) {
-	for( int ix = 0; ix < vec.GetDimension(); ++ix ) {
-		float value = vec[ ix ];
-		int packed = 0;
-		memcpy( &packed, &value, sizeof( packed ) );
-		PushParm( packed );
-	}
+	interpreter.PushVector( vec );
 }
 
 /*
@@ -69,9 +62,7 @@ hhThread::PushEntity
 ================
 */
 void hhThread::PushEntity( const idEntity *ent ) {
-	HH_ASSERT( ent );
-
-	PushParm( ent->entityNumber + 1 );
+	PushParm( ent ? ( ent->entityNumber + 1 ) : 0 );
 }
 
 /*
@@ -102,29 +93,12 @@ hhThread::ParseAndPushArgsOntoStack
 ================
 */
 bool hhThread::ParseAndPushArgsOntoStack( const idList<idStr>& args, const function_t* function ) {
-	if( !function || !function->def || !function->def->TypeDef() ) {
-		gameLocal.Warning( "hhThread::ParseAndPushArgsOntoStack called with invalid function" );
-		return false;
-	}
-
 	int numParms = function->def->TypeDef()->NumParameters();
-	if( args.Num() < numParms ) {
-		gameLocal.Warning( "hhThread::ParseAndPushArgsOntoStack expected %d parms, got %d for '%s'",
-			numParms, args.Num(), function->Name() );
-		return false;
-	}
-
 	idTypeDef* parmType = NULL;
 	const char* parm = NULL;
 
 	for( int ix = 0; ix < numParms; ++ix ) {
 		parmType = function->def->TypeDef()->GetParmType( ix );
-		if( !parmType ) {
-			gameLocal.Warning( "hhThread::ParseAndPushArgsOntoStack missing parm type %d for '%s'",
-				ix, function->Name() );
-			return false;
-		}
-
 		parm = args[ ix ].c_str();
 
 		parmType->PushOntoStack( parm, this );

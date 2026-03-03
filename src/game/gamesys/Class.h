@@ -10,6 +10,8 @@ instancing of objects.
 #ifndef __SYS_CLASS_H__
 #define __SYS_CLASS_H__
 
+#include <stdint.h>
+
 class idClass;
 class idTypeInfo;
 
@@ -35,8 +37,8 @@ public:
 	intptr_t	value;
 
 	idEventArg()								{ type = D_EVENT_INTEGER; value = 0; };
-	idEventArg( int data )						{ type = D_EVENT_INTEGER; value = data; };
-	idEventArg( float data )					{ type = D_EVENT_FLOAT; value = *reinterpret_cast<int *>( &data ); };
+	idEventArg( int data )						{ type = D_EVENT_INTEGER; value = static_cast<intptr_t>( data ); };
+	idEventArg( float data )					{ type = D_EVENT_FLOAT; value = static_cast<intptr_t>( *reinterpret_cast<int *>( &data ) ); };
 	//HUMANHEAD: aob - added const to idVec3
 	idEventArg( const idVec3 &data )			{ type = D_EVENT_VECTOR; value = reinterpret_cast<intptr_t>( &data ); };
 	idEventArg( const idStr &data )				{ type = D_EVENT_STRING; value = reinterpret_cast<intptr_t>( data.c_str() ); };

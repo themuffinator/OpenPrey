@@ -3,22 +3,6 @@
 
 #include "prey_local.h"
 
-static float Weapon_CalcAspectAgnosticZoomFov( float zoomFov ) {
-	const float clampedZoomFov = idMath::ClampFloat( 1.0f, 179.0f, zoomFov );
-	const float referenceAspect = 4.0f / 3.0f;
-	const float currentAspect = idMath::ClampFloat( 0.1f, 10.0f, gameLocal.GetScreenAspectRatio() );
-
-	if ( idMath::Fabs( currentAspect - referenceAspect ) < 0.001f ) {
-		return clampedZoomFov;
-	}
-
-	const float halfZoomFov = DEG2RAD( clampedZoomFov * 0.5f );
-	const float aspectScale = referenceAspect / currentAspect;
-	const float adjustedHalfFov = idMath::ATan( idMath::Tan( halfZoomFov ) * aspectScale );
-
-	return idMath::ClampFloat( 1.0f, 179.0f, RAD2DEG( adjustedHalfFov ) * 2.0f );
-}
-
 /***********************************************************************
 
   hhWeaponZoomable
@@ -39,8 +23,7 @@ hhWeaponZoomable::ZoomIn
 */
 void hhWeaponZoomable::ZoomIn() {
 	if( owner.IsValid() && dict ) {
-		const float zoomTargetFov = Weapon_CalcAspectAgnosticZoomFov( static_cast<float>( GetZoomFov() ) );
-		owner->GetZoomFov().Init( gameLocal.GetTime(), SEC2MS(dict->GetFloat("zoomDuration")), owner->CalcFov(true), zoomTargetFov );
+		owner->GetZoomFov().Init( gameLocal.GetTime(), SEC2MS(dict->GetFloat("zoomDuration")), owner->CalcFov(true), GetZoomFov() );
 	}
 
 	clientZoomTime = gameLocal.time + CLIENT_ZOOM_FUDGE; //rww

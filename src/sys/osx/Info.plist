@@ -5,17 +5,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>OpenQ4</string>
+	<string>OpenPrey</string>
 	<key>CFBundleIconFile</key>
 	<string>prey.icns</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.darkmatter.openq4</string>
+	<string>com.darkmatter.openprey</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleSignature</key>
-	<string>OQ4</string>
+	<string>OPRY</string>
 	<key>CFBundleVersion</key>
 	<string>0.0.1</string>
 	<key>NSMainNibFile</key>

@@ -553,16 +553,13 @@ void hhTarget_Subtitle::Event_Activate(idEntity *activator) {
 	int x = spawnArgs.GetInt("xpos");
 	int y = spawnArgs.GetInt("ypos");
 	bool bCentered = spawnArgs.GetBool("centered");
-	const char *text = common->GetLanguageDict()->GetString( spawnArgs.GetString( "text_subtitle" ) );
+	const char *text = spawnArgs.GetString("text_subtitle");
 	float duration = spawnArgs.GetFloat("duration");
 
 	idPlayer *player = gameLocal.GetLocalPlayer();
-	if ( !player || !player->hud ) { //rww
+	if (!player) { //rww
 		return;
 	}
-
-	// Prevent stale subtitle state from leaking into later cinematic/gameplay frames.
-	player->hud->HandleNamedEvent( "RemoveSubtitleInstant" );
 	player->hud->SetStateInt("subtitlex", bCentered ? 0 : x);
 	player->hud->SetStateInt("subtitley", y);
 	player->hud->SetStateInt("subtitlecentered", bCentered);
@@ -576,10 +573,8 @@ void hhTarget_Subtitle::Event_Activate(idEntity *activator) {
 
 void hhTarget_Subtitle::Event_FadeOutText() {
 	idPlayer *player = gameLocal.GetLocalPlayer();
-	if ( player && player->hud ) {
-		player->hud->HandleNamedEvent( "RemoveSubtitleInstant" );
-		player->hud->SetStateString( "subtitletext", "" );
-		player->hud->StateChanged( gameLocal.time );
+	if (player && player->hud) {
+		player->hud->HandleNamedEvent("RemoveSubtitle");
 	}
 }
 
@@ -611,30 +606,14 @@ void hhTarget_EndLevel::Event_Activate(idEntity *activator) {
 			guiLoading = uiManager->FindGui( "guis/map/loading.gui", true, false, true );
 		}
 		guiLoading->SetStateFloat("map_loading", 0.0f);
-		// Never gate level transitions behind a post-load key prompt.
-		guiLoading->SetStateBool("showddainfo", false);
-		const char *friendlyName = nextMap.c_str();
-		char screenshotPath[ MAX_STRING_CHARS ];
-		fileSystem->FindMapScreenshot( nextMap.c_str(), screenshotPath, sizeof( screenshotPath ) );
-		idStr loadingImage = screenshotPath;
-		loadingImage.StripFileExtension();
+		guiLoading->SetStateBool("showddainfo", true);
 
-		const idDecl *mapDecl = declManager->FindType(DECL_MAPDEF, nextMap.c_str(), false );
-		if ( !mapDecl ) {
-			mapDecl = declManager->FindType(DECL_MAPDEF, stripped.c_str(), false );
-		}
+		const idDecl *mapDecl = declManager->FindType(DECL_MAPDEF, stripped.c_str(), false );
 		if ( mapDecl ) {
 			const idDeclEntityDef *mapInfo = static_cast<const idDeclEntityDef *>(mapDecl);
-			friendlyName = common->GetLanguageDict()->GetString( mapInfo->dict.GetString( "name", nextMap.c_str() ) );
-			const char *loadImage = mapInfo->dict.GetString( "loadimage", "" );
-			if ( loadImage[ 0 ] ) {
-				loadingImage = loadImage;
-			}
+			const char *friendlyName = mapInfo->dict.GetString("name");
+			guiLoading->SetStateString("friendlyname", friendlyName);
 		}
-		guiLoading->SetStateString( "friendlyname", friendlyName );
-		guiLoading->SetStateString( "loading_levelname", friendlyName );
-		guiLoading->SetStateString( "image", loadingImage.c_str() );
-		guiLoading->SetStateString( "loading_bkgnd", loadingImage.c_str() );
 
 		guiLoading->StateChanged(gameLocal.time);
 

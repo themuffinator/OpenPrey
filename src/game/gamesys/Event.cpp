@@ -76,7 +76,7 @@ idEventDef::idEventDef( const char *command, const char *formatspec, char return
 			break;
 
 		case D_EVENT_INTEGER :
-			argsize += sizeof( intptr_t );
+			argsize += sizeof( int );
 			break;
 
 		case D_EVENT_VECTOR :
@@ -274,11 +274,8 @@ idEvent *idEvent::Alloc( const idEventDef *evdef, int numargs, va_list args ) {
 
 		switch( format[ i ] ) {
 		case D_EVENT_FLOAT :
-			*reinterpret_cast<int *>( dataPtr ) = static_cast<int>( arg->value );
-			break;
-
 		case D_EVENT_INTEGER :
-			*reinterpret_cast<intptr_t *>( dataPtr ) = arg->value;
+			*reinterpret_cast<int *>( dataPtr ) = static_cast<int>( arg->value );
 			break;
 
 		case D_EVENT_VECTOR :
@@ -486,11 +483,8 @@ void idEvent::ServiceEvents( void ) {
 			data = event->data;
 			switch( formatspec[ i ] ) {
 			case D_EVENT_FLOAT :
-				args[ i ] = *reinterpret_cast<int *>( &data[ offset ] );
-				break;
-
 			case D_EVENT_INTEGER :
-				args[ i ] = *reinterpret_cast<intptr_t *>( &data[ offset ] );
+				args[ i ] = static_cast<intptr_t>( *reinterpret_cast<int *>( &data[ offset ] ) );
 				break;
 
 			case D_EVENT_VECTOR :
@@ -660,18 +654,6 @@ void idEvent::Save( idSaveGame *savefile ) {
 					size += sizeof( float );
 					break;
 				case D_EVENT_INTEGER :
-					{
-						const uintptr_t value = static_cast<uintptr_t>( *reinterpret_cast<intptr_t *>( dataPtr ) );
-						if ( sizeof( intptr_t ) > sizeof( int ) ) {
-							savefile->WriteInt( static_cast<int>( value & 0xFFFFFFFFu ) );
-							const unsigned long long value64 = static_cast<unsigned long long>( value );
-							savefile->WriteInt( static_cast<int>( ( value64 >> 32 ) & 0xFFFFFFFFull ) );
-						} else {
-							savefile->WriteInt( static_cast<int>( value ) );
-						}
-						size += sizeof( intptr_t );
-					}
-					break;
 				case D_EVENT_ENTITY :
 				case D_EVENT_ENTITY_NULL :
 					savefile->WriteInt( *reinterpret_cast<int *>( dataPtr ) );
@@ -771,26 +753,6 @@ void idEvent::Restore( idRestoreGame *savefile ) {
 						size += sizeof( float );
 						break;
 					case D_EVENT_INTEGER :
-						{
-							intptr_t value;
-							if ( sizeof( intptr_t ) > sizeof( int ) ) {
-								int low;
-								int high;
-								savefile->ReadInt( low );
-								savefile->ReadInt( high );
-								const uintptr_t lowBits = static_cast<uintptr_t>( static_cast<unsigned int>( low ) );
-								const unsigned long long highBits64 = static_cast<unsigned long long>( static_cast<unsigned int>( high ) ) << 32;
-								const uintptr_t highBits = static_cast<uintptr_t>( highBits64 );
-								value = static_cast<intptr_t>( lowBits | highBits );
-							} else {
-								int temp;
-								savefile->ReadInt( temp );
-								value = static_cast<intptr_t>( temp );
-							}
-							*reinterpret_cast<intptr_t *>( dataPtr ) = value;
-							size += sizeof( intptr_t );
-						}
-						break;
 					case D_EVENT_ENTITY :
 					case D_EVENT_ENTITY_NULL :
 						savefile->ReadInt( *reinterpret_cast<int *>( dataPtr ) );

@@ -34,14 +34,9 @@ extern const idEventDef EV_Fx_KillFx;
 extern const idEventDef EV_Fx_Action;
 // HUMANHEAD END
 
-// HUMANHEAD: shared fx axis modes used by idEntityFx/hhEntityFx
-enum fxAxis {
-	AXIS_CURRENT,
-	AXIS_NORMAL,
-	AXIS_BOUNCE,
-	AXIS_INCOMING,
-	AXIS_CUSTOMLOCAL
-};
+// HUMANHEAD
+enum fxAxis { AXIS_CURRENT, AXIS_NORMAL, AXIS_BOUNCE, AXIS_INCOMING, AXIS_CUSTOMLOCAL };
+// HUMANHEAD END
 
 class idEntityFx : public idEntity {
 public:

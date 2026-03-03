@@ -270,9 +270,6 @@ idPathCorner::Spawn
 =====================
 */
 void idPathCorner::Spawn( void ) {
-	// Path corners are logic-only navigation nodes and should never render editor placeholder models at runtime.
-	Hide();
-	GetPhysics()->SetContents( 0 );
 }
 
 /*

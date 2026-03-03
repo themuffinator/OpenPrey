@@ -408,7 +408,6 @@ idPVS::FloodPassagePVS_r
 */
 pvsStack_t *idPVS::FloodPassagePVS_r( pvsPortal_t *source, const pvsPortal_t *portal, pvsStack_t *prevStack ) const {
 #ifdef DEBUG_PASSAGE_OVERFLOW //HUMANHEAD rww
-#if defined(_M_IX86)
 	__asm {
 		cmp		debugFloodPassageOverflow,esp
 		jle		cont
@@ -416,7 +415,6 @@ pvsStack_t *idPVS::FloodPassagePVS_r( pvsPortal_t *source, const pvsPortal_t *po
 	}
 	gameLocal.Error("Preempted stack overflow in idPVS::FloodPassagePVS_r.");
 cont:
-#endif
 #endif //HUMANHEAD END
 
 	int i, j, n, m;
@@ -528,10 +526,8 @@ void idPVS::PassagePVS( void ) const {
 		memset( source->vis, 0, portalVisBytes );
 		memcpy( stack->mightSee, source->mightSee, portalVisBytes );
 #ifdef DEBUG_PASSAGE_OVERFLOW //HUMANHEAD rww
-#if defined(_M_IX86)
 		__asm mov debugFloodPassageOverflow,esp
 		debugFloodPassageOverflow -= 3900000; //close to 4mb, because our stack size is 4mb.
-#endif
 #endif //HUMANHEAD END
 		FloodPassagePVS_r( source, source, stack );
 		source->done = true;

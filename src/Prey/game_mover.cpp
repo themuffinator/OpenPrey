@@ -16,18 +16,10 @@ END_CLASS
 
 
 void hhMover::Spawn(void) {
-	// hhMover extends idMover behavior; keep the base mover setup intact.
-	idMover::Spawn();
-
-	const char* className = spawnArgs.GetString( "classname" );
-	if ( className && !idStr::Icmpn( className, "script_controlpoint", 19 ) ) {
-		// Editor-only control points are runtime mover anchors and should not render in-game.
-		Hide();
-	}
 
 	if ( GetPhysics()->GetClipModel() && spawnArgs.GetBool( "unblockable", "0" ) ) {
 		// HUMANHEAD pdm: forcing unblockable off when noclipmodel is set, not valid to have push without clipmodel
-   		//gameLocal.Printf( "Setting to nopushsupported" );
+  		//gameLocal.Printf( "Setting to nopushsupported" );
  		physicsObj.SetPusher( 0 | PUSHFL_UNBLOCKABLE );
   	}
   	

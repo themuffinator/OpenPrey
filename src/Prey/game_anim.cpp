@@ -151,10 +151,7 @@ bool hhAnim::CallFrameCommandsExtra( const frameCommand_t &command, idEntity *en
 	switch( command.type ) {
 		case FC_EVENT_ARGS: {
 			if ( command.function && command.parmList && command.function->eventdef ) {
-				idEventArg parmListArg;
-				parmListArg.type = D_EVENT_INTEGER;
-				parmListArg.value = reinterpret_cast<intptr_t>( command.parmList );
-				ent->ProcessEvent( command.function->eventdef, parmListArg );
+				ent->ProcessEvent( command.function->eventdef, (int)command.parmList );
 			}	
 			return( true );
 		}

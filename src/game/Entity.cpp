@@ -378,17 +378,7 @@ void idGameEdit::ParseSpawnArgsToRefSound( const idDict *args, refSound_t *refSo
 
 	refSound->parms.minDistance = args->GetFloat( "s_mindistance" );
 	refSound->parms.maxDistance = args->GetFloat( "s_maxdistance" );
-	// Prey/Doom3 map speaker spawnargs author s_volume in dB.
-	// Keep 0.0f as the "no override" sentinel for override merging.
-	const float spawnVolumeDb = args->GetFloat( "s_volume" );
-	if ( spawnVolumeDb != 0.0f ) {
-		refSound->parms.volume = idMath::dBToScale( spawnVolumeDb );
-
-		if ( refSound->parms.volume < 0.0f || refSound->parms.volume > 5.0f ) {
-			common->Warning( "Unreasonable volume (%g) on entity '%s'", refSound->parms.volume, args->GetString( "name", "*unknown*" ) );
-			refSound->parms.volume = 5.0f;
-		}
-	}
+	refSound->parms.volume = args->GetFloat( "s_volume" );
 	refSound->parms.shakes = args->GetFloat( "s_shakes" );
 
 	args->GetVector( "origin", "0 0 0", refSound->origin );
@@ -416,18 +406,11 @@ void idGameEdit::ParseSpawnArgsToRefSound( const idDict *args, refSound_t *refSo
 	if ( args->GetBool( "s_unclamped" ) ) {
 		refSound->parms.soundShaderFlags |= SSF_UNCLAMPED;
 	}
-	if ( args->GetBool( "s_center" ) ) {
-		refSound->parms.soundShaderFlags |= SSF_CENTER;
-	}
 	refSound->parms.soundClass = args->GetInt( "s_soundClass" );
 
 	temp = args->GetString( "s_shader" );
 	if ( temp[0] != '\0' ) {
 		refSound->shader = declManager->FindSound( temp );
-	}
-
-	if ( refSound->parms.maxDistance < refSound->parms.minDistance ) {
-		common->Warning( "ParseSpawnArgsToRefSound: Max distance less than min distance for entity '%s'", args->GetString( "name", "*unknown*" ) );
 	}
 }
 

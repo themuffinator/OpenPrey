@@ -24,7 +24,7 @@ idVec3 idAASLocal::FindNearestPoint(const idVec3 &ally,
 
 
 	FindNearestPointInArea(nearPoint, 
-						   PointReachableAreaNum( follower, DefaultSearchBounds(), AREA_REACHABLE_WALK ),
+						   PointReachableAreaNum( follower, DefaultSearchBounds(), ( AREA_REACHABLE_WALK | AREA_REACHABLE_FLY ) ),
 						   areasEntered);
 
 	
@@ -46,9 +46,9 @@ Returns true if a valid point was found
 bool idAASLocal::FindNearestPointInArea(hhNearPoint &nearPoint,
 										int currentArea,
 										idList<int> &areasEntered) {
-	const aasArea_t *area;
+	aasArea_t *area;
 	findAreaType_t foundPoint;
-	const idReachability *reach;
+	idReachability *reach;
 	int areaNum;
 
 
@@ -56,7 +56,7 @@ bool idAASLocal::FindNearestPointInArea(hhNearPoint &nearPoint,
 		return(false);
 	}
 
-	area = &file->GetArea( currentArea );
+	area = &file->areas[currentArea];
 
 	areasEntered.Append(currentArea);
 
@@ -103,10 +103,10 @@ idAASLocal::CheckPointsInArea
 */
 findAreaType_t idAASLocal::CheckPointsInArea(hhNearPoint &nearPoint, 
 											   int areaNum) {
-	const aasArea_t *area;
-	const aasFace_t *face;
-	const aasEdge_t *edge; 
-	const aasVertex_t *vert;
+	aasArea_t *area;
+	aasFace_t *face;
+	aasEdge_t *edge; 
+	aasVertex_t *vert;
 	int numFaces, firstFace, faceNum;
 	int numEdges, firstEdge, edgeNum;
 	int faceCounter, edgeCounter, vertCounter;
@@ -118,23 +118,23 @@ findAreaType_t idAASLocal::CheckPointsInArea(hhNearPoint &nearPoint,
 	areaType = AREA_NO_VALID_POINTS;
 	pointTotal = 0;
 
-	area = &file->GetArea( areaNum );
+	area = &file->areas[areaNum];
 	numFaces = area->numFaces;
 	firstFace = area->firstFace;
 
 	for (faceCounter = 0; faceCounter < numFaces; ++faceCounter) {
-		faceNum = abs( file->GetFaceIndex( firstFace + faceCounter ) );
+		faceNum = abs(file->faceIndex[firstFace + faceCounter]);
 
-		face = &file->GetFace( faceNum );
+		face = &file->faces[faceNum];
 		numEdges = face->numEdges;
 		firstEdge = face->firstEdge;
 
 		for (edgeCounter = 0; edgeCounter < numEdges; ++edgeCounter) {
-			edgeNum = abs( file->GetEdgeIndex( firstEdge + edgeCounter ) );
-			edge = &file->GetEdge( edgeNum );
+			edgeNum = abs(file->edgeIndex[firstEdge + edgeCounter]);
+			edge = &file->edges[edgeNum];
 			
 			for (vertCounter = 0; vertCounter < 2; ++vertCounter) {
-				vert = &file->GetVertex( edge->vertexNum[vertCounter] );
+				vert = &file->vertices[edge->vertexNum[vertCounter]];
 				
 				//! Make a function				
 				pointType = CheckPoint(*vert, nearPoint);
@@ -164,7 +164,7 @@ findAreaType_t idAASLocal::CheckPointsInArea(hhNearPoint &nearPoint,
 idAASLocal::CheckPoint
 ======================
 */
-findPointType_t idAASLocal::CheckPoint(const idVec3 &point, 
+findPointType_t idAASLocal::CheckPoint(idVec3 &point, 
 									   hhNearPoint &nearPoint) {
 	idVec3 pointDirection;
 	findPointType_t pointType;

@@ -550,8 +550,7 @@ int idTypeInfoTools::WriteVariable_r( const void *varPtr, const char *varName, c
 	// if this is a pointer
 	isPointer = 0;
 	for ( i = typeString.Length(); i > 0 && typeString[i - 1] == '*'; i -= 2 ) {
-		const uintptr_t rawPtrValue = reinterpret_cast<uintptr_t>( varPtr );
-		if ( rawPtrValue == 0xcdcdcdcdULL || ( varPtr != NULL && *((unsigned long *)varPtr) == 0xcdcdcdcd ) ) {
+		if ( varPtr == (void *)0xcdcdcdcd || ( varPtr != NULL && *((unsigned long *)varPtr) == 0xcdcdcdcd ) ) {
 			common->Warning( "%s%s::%s%s references uninitialized memory", prefix, scope, varName, "" );
 			return typeSize;
 		}
@@ -870,34 +869,34 @@ int idTypeInfoTools::WriteVariable_r( const void *varPtr, const char *varName, c
 	} else if ( token == "idExtrapolate" ) {
 
 		const idExtrapolate<float> *interpolate = ((idExtrapolate<float> *)varPtr);
-		Write( varName, varType, scope, prefix, ".extrapolationType", idStr( interpolate->GetExtrapolationType() ).c_str(), NULL, 0 );
-		Write( varName, varType, scope, prefix, ".startTime", idStr( interpolate->GetStartTime() ).c_str(), NULL, 0 );
-		Write( varName, varType, scope, prefix, ".duration", idStr( interpolate->GetDuration() ).c_str(), NULL, 0 );
+		Write( varName, varType, scope, prefix, ".extrapolationType", idStr( interpolate->GetExtrapolationType() ).c_str(), &interpolate->extrapolationType, sizeof( interpolate->extrapolationType ) );
+		Write( varName, varType, scope, prefix, ".startTime", idStr( interpolate->GetStartTime() ).c_str(), &interpolate->startTime, sizeof( interpolate->startTime ) );
+		Write( varName, varType, scope, prefix, ".duration", idStr( interpolate->GetDuration() ).c_str(), &interpolate->duration, sizeof( interpolate->duration ) );
 
 		if ( ParseTemplateArguments( typeSrc, templateArgs ) ) {
 			if ( templateArgs == "int" ) {
 				const idExtrapolate<int> *interpolate = ((idExtrapolate<int> *)varPtr);
-				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".baseSpeed", idStr( interpolate->GetBaseSpeed() ).c_str(), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".speed", idStr( interpolate->GetSpeed() ).c_str(), NULL, 0 );
+				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), &interpolate->startValue, sizeof( interpolate->startValue ) );
+				Write( varName, varType, scope, prefix, ".baseSpeed", idStr( interpolate->GetBaseSpeed() ).c_str(), &interpolate->baseSpeed, sizeof( interpolate->baseSpeed ) );
+				Write( varName, varType, scope, prefix, ".speed", idStr( interpolate->GetSpeed() ).c_str(), &interpolate->speed, sizeof( interpolate->speed ) );
 				typeSize = sizeof( idExtrapolate<int> );
 			} else if ( templateArgs == "float" ) {
 				const idExtrapolate<float> *interpolate = ((idExtrapolate<float> *)varPtr);
-				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".baseSpeed", idStr( interpolate->GetBaseSpeed() ).c_str(), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".speed", idStr( interpolate->GetSpeed() ).c_str(), NULL, 0 );
+				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), &interpolate->startValue, sizeof( interpolate->startValue ) );
+				Write( varName, varType, scope, prefix, ".baseSpeed", idStr( interpolate->GetBaseSpeed() ).c_str(), &interpolate->baseSpeed, sizeof( interpolate->baseSpeed ) );
+				Write( varName, varType, scope, prefix, ".speed", idStr( interpolate->GetSpeed() ).c_str(), &interpolate->speed, sizeof( interpolate->speed ) );
 				typeSize = sizeof( idExtrapolate<float> );
 			} else if ( templateArgs == "idVec3" ) {
 				const idExtrapolate<idVec3> *interpolate = ((idExtrapolate<idVec3> *)varPtr);
-				Write( varName, varType, scope, prefix, ".startValue", interpolate->GetStartValue().ToString( 8 ), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".baseSpeed", interpolate->GetBaseSpeed().ToString( 8 ), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".speed", interpolate->GetSpeed().ToString( 8 ), NULL, 0 );
+				Write( varName, varType, scope, prefix, ".startValue", interpolate->GetStartValue().ToString( 8 ), &interpolate->startValue, sizeof( interpolate->startValue ) );
+				Write( varName, varType, scope, prefix, ".baseSpeed", interpolate->GetBaseSpeed().ToString( 8 ), &interpolate->baseSpeed, sizeof( interpolate->baseSpeed ) );
+				Write( varName, varType, scope, prefix, ".speed", interpolate->GetSpeed().ToString( 8 ), &interpolate->speed, sizeof( interpolate->speed ) );
 				typeSize = sizeof( idExtrapolate<idVec3> );
 			} else if ( templateArgs == "idAngles" ) {
 				const idExtrapolate<idAngles> *interpolate = ((idExtrapolate<idAngles> *)varPtr);
-				Write( varName, varType, scope, prefix, ".startValue", interpolate->GetStartValue().ToString( 8 ), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".baseSpeed", interpolate->GetBaseSpeed().ToString( 8 ), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".speed", interpolate->GetSpeed().ToString( 8 ), NULL, 0 );
+				Write( varName, varType, scope, prefix, ".startValue", interpolate->GetStartValue().ToString( 8 ), &interpolate->startValue, sizeof( interpolate->startValue ) );
+				Write( varName, varType, scope, prefix, ".baseSpeed", interpolate->GetBaseSpeed().ToString( 8 ), &interpolate->baseSpeed, sizeof( interpolate->baseSpeed ) );
+				Write( varName, varType, scope, prefix, ".speed", interpolate->GetSpeed().ToString( 8 ), &interpolate->speed, sizeof( interpolate->speed ) );
 				typeSize = sizeof( idExtrapolate<idAngles> );
 			} else {
 				Write( varName, varType, scope, prefix, "", va( "<unknown template argument type '%s' for idExtrapolate>", templateArgs.c_str() ), NULL, 0 );
@@ -907,19 +906,19 @@ int idTypeInfoTools::WriteVariable_r( const void *varPtr, const char *varName, c
 	} else if ( token == "idInterpolate" ) {
 
 		const idInterpolate<float> *interpolate = ((idInterpolate<float> *)varPtr);
-		Write( varName, varType, scope, prefix, ".startTime", idStr( interpolate->GetStartTime() ).c_str(), NULL, 0 );
-		Write( varName, varType, scope, prefix, ".duration", idStr( interpolate->GetDuration() ).c_str(), NULL, 0 );
+		Write( varName, varType, scope, prefix, ".startTime", idStr( interpolate->GetStartTime() ).c_str(), &interpolate->startTime, sizeof( interpolate->startTime ) );
+		Write( varName, varType, scope, prefix, ".duration", idStr( interpolate->GetDuration() ).c_str(), &interpolate->duration, sizeof( interpolate->duration ) );
 
 		if ( ParseTemplateArguments( typeSrc, templateArgs ) ) {
 			if ( templateArgs == "int" ) {
 				const idInterpolate<int> *interpolate = ((idInterpolate<int> *)varPtr);
-				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), NULL, 0 );
+				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), &interpolate->startValue, sizeof( interpolate->startValue ) );
+				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), &interpolate->endValue, sizeof( interpolate->endValue ) );
 				typeSize = sizeof( idInterpolate<int> );
 			} else if ( templateArgs == "float" ) {
 				const idInterpolate<float> *interpolate = ((idInterpolate<float> *)varPtr);
-				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), NULL, 0 );
+				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), &interpolate->startValue, sizeof( interpolate->startValue ) );
+				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), &interpolate->endValue, sizeof( interpolate->endValue ) );
 				typeSize = sizeof( idInterpolate<float> );
 			} else {
 				Write( varName, varType, scope, prefix, "", va( "<unknown template argument type '%s' for idInterpolate>", templateArgs.c_str() ), NULL, 0 );
@@ -929,21 +928,21 @@ int idTypeInfoTools::WriteVariable_r( const void *varPtr, const char *varName, c
 	} else if ( token == "idInterpolateAccelDecelLinear" ) {
 
 		const idInterpolateAccelDecelLinear<float> *interpolate = ((idInterpolateAccelDecelLinear<float> *)varPtr);
-		Write( varName, varType, scope, prefix, ".startTime", idStr( interpolate->GetStartTime() ).c_str(), NULL, 0 );
-		Write( varName, varType, scope, prefix, ".accelTime", idStr( interpolate->GetAcceleration() ).c_str(), NULL, 0 );
-		Write( varName, varType, scope, prefix, ".linearTime", idStr( interpolate->GetDuration() - interpolate->GetAcceleration() - interpolate->GetDeceleration() ).c_str(), NULL, 0 );
-		Write( varName, varType, scope, prefix, ".decelTime", idStr( interpolate->GetDeceleration() ).c_str(), NULL, 0 );
+		Write( varName, varType, scope, prefix, ".startTime", idStr( interpolate->GetStartTime() ).c_str(), &interpolate->startTime, sizeof( interpolate->startTime ) );
+		Write( varName, varType, scope, prefix, ".accelTime", idStr( interpolate->GetAcceleration() ).c_str(), &interpolate->accelTime, sizeof( interpolate->accelTime ) );
+		Write( varName, varType, scope, prefix, ".linearTime", idStr( interpolate->linearTime ).c_str(), &interpolate->linearTime, sizeof( interpolate->linearTime ) );
+		Write( varName, varType, scope, prefix, ".decelTime", idStr( interpolate->GetDeceleration() ).c_str(), &interpolate->decelTime, sizeof( interpolate->decelTime ) );
 
 		if ( ParseTemplateArguments( typeSrc, templateArgs ) ) {
 			if ( templateArgs == "int" ) {
 				const idInterpolateAccelDecelLinear<int> *interpolate = ((idInterpolateAccelDecelLinear<int> *)varPtr);
-				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), NULL, 0 );
+				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), &interpolate->startValue, sizeof( interpolate->startValue ) );
+				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), &interpolate->endValue, sizeof( interpolate->endValue ) );
 				typeSize = sizeof( idInterpolateAccelDecelLinear<int> );
 			} else if ( templateArgs == "float" ) {
 				const idInterpolateAccelDecelLinear<float> *interpolate = ((idInterpolateAccelDecelLinear<float> *)varPtr);
-				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), NULL, 0 );
+				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), &interpolate->startValue, sizeof( interpolate->startValue ) );
+				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), &interpolate->endValue, sizeof( interpolate->endValue ) );
 				typeSize = sizeof( idInterpolateAccelDecelLinear<float> );
 			} else {
 				Write( varName, varType, scope, prefix, "", va( "<unknown template argument type '%s' for idInterpolateAccelDecelLinear>", templateArgs.c_str() ), NULL, 0 );
@@ -953,21 +952,21 @@ int idTypeInfoTools::WriteVariable_r( const void *varPtr, const char *varName, c
 	} else if ( token == "idInterpolateAccelDecelSine" ) {
 
 		const idInterpolateAccelDecelSine<float> *interpolate = ((idInterpolateAccelDecelSine<float> *)varPtr);
-		Write( varName, varType, scope, prefix, ".startTime", idStr( interpolate->GetStartTime() ).c_str(), NULL, 0 );
-		Write( varName, varType, scope, prefix, ".accelTime", idStr( interpolate->GetAcceleration() ).c_str(), NULL, 0 );
-		Write( varName, varType, scope, prefix, ".linearTime", idStr( interpolate->GetDuration() - interpolate->GetAcceleration() - interpolate->GetDeceleration() ).c_str(), NULL, 0 );
-		Write( varName, varType, scope, prefix, ".decelTime", idStr( interpolate->GetDeceleration() ).c_str(), NULL, 0 );
+		Write( varName, varType, scope, prefix, ".startTime", idStr( interpolate->GetStartTime() ).c_str(), &interpolate->startTime, sizeof( interpolate->startTime ) );
+		Write( varName, varType, scope, prefix, ".accelTime", idStr( interpolate->GetAcceleration() ).c_str(), &interpolate->accelTime, sizeof( interpolate->accelTime ) );
+		Write( varName, varType, scope, prefix, ".linearTime", idStr( interpolate->linearTime ).c_str(), &interpolate->linearTime, sizeof( interpolate->linearTime ) );
+		Write( varName, varType, scope, prefix, ".decelTime", idStr( interpolate->GetDeceleration() ).c_str(), &interpolate->decelTime, sizeof( interpolate->decelTime ) );
 
 		if ( ParseTemplateArguments( typeSrc, templateArgs ) ) {
 			if ( templateArgs == "int" ) {
 				const idInterpolateAccelDecelSine<int> *interpolate = ((idInterpolateAccelDecelSine<int> *)varPtr);
-				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), NULL, 0 );
+				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), &interpolate->startValue, sizeof( interpolate->startValue ) );
+				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), &interpolate->endValue, sizeof( interpolate->endValue ) );
 				typeSize = sizeof( idInterpolateAccelDecelSine<int> );
 			} else if ( templateArgs == "float" ) {
 				const idInterpolateAccelDecelSine<float> *interpolate = ((idInterpolateAccelDecelSine<float> *)varPtr);
-				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), NULL, 0 );
-				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), NULL, 0 );
+				Write( varName, varType, scope, prefix, ".startValue", idStr( interpolate->GetStartValue() ).c_str(), &interpolate->startValue, sizeof( interpolate->startValue ) );
+				Write( varName, varType, scope, prefix, ".endValue", idStr( interpolate->GetEndValue() ).c_str(), &interpolate->endValue, sizeof( interpolate->endValue ) );
 				typeSize = sizeof( idInterpolateAccelDecelSine<float> );
 			} else {
 				Write( varName, varType, scope, prefix, "", va( "<unknown template argument type '%s' for idInterpolateAccelDecelSine>", templateArgs.c_str() ), NULL, 0 );
@@ -993,8 +992,8 @@ int idTypeInfoTools::WriteVariable_r( const void *varPtr, const char *varName, c
 
 	} else if ( token == "cmHandle_t" ) {
 
-		typeSize = sizeof( cmHandle_t );
-		Write( varName, varType, scope, prefix, "", va( "%p", *((cmHandle_t *)varPtr) ), varPtr, typeSize );
+		typeSize = sizeof( int );
+		Write( varName, varType, scope, prefix, "", va( "%d", *((int *)varPtr) ), varPtr, typeSize );
 
 	} else if ( token == "idEntityPtr" ) {
 
