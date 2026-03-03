@@ -752,6 +752,12 @@ public:
 	virtual void			DrawSmallStringExt( int x, int y, const char *string, const idVec4 &setColor, bool forceColor, const idMaterial *material );
 	virtual void			DrawBigChar( int x, int y, int ch, const idMaterial *material );
 	virtual void			DrawBigStringExt( int x, int y, const char *string, const idVec4 &setColor, bool forceColor, const idMaterial *material );
+	virtual bool			IsScopeView( void );
+	virtual void			SetScopeView( bool view );
+	virtual bool			IsSpiritWalkView( void );
+	virtual void			SetSpiritWalkView( bool view );
+	virtual bool			IsShuttleView( void );
+	virtual void			SetShuttleView( bool view );
 	virtual void			WriteDemoPics();
 	virtual void			DrawDemoPics();
 	virtual void			BeginFrame( int windowWidth, int windowHeight );
@@ -835,6 +841,8 @@ public:
 	performanceCounters_t	pc;					// performance counters
 
 	drawSurfsCommand_t		lockSurfacesCmd;	// use this when r_lockSurfaces = 1
+	viewDef_t				lockSurfacesViewDef; // of locked position/view
+	viewDef_t				lockSurfacesRealViewDef; // of actual player position
 
 	viewEntity_t			identitySpace;		// can use if we don't know viewDef->worldSpace is valid
 	FILE *					logFile;			// for logging GL calls and frame breaks
@@ -850,7 +858,14 @@ public:
 	class idGuiModel *		demoGuiModel;
 	idList<idRenderTexture*> pendingRenderTextureDeletes;
 	bool					useUIViewportFor2D;
+	bool					scopeViewEnabled;
+	bool					spiritWalkViewEnabled;
+	bool					shuttleViewEnabled;
+	int						lastRenderSkybox;
 	idRenderTexture *		activeRenderTexture;
+
+	ID_INLINE bool SkyboxRenderedInFrame() const { return frameCount == lastRenderSkybox; }
+	ID_INLINE void RenderSkyboxInFrame() { lastRenderSkybox = frameCount; }
 
 	unsigned short			gammaTable[256];	// brightness / gamma modify this
 };

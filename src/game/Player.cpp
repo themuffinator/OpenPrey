@@ -53,6 +53,24 @@ const idEventDef EV_Player_HideTip( "hideTip" );
 const idEventDef EV_Player_LevelTrigger( "levelTrigger" );
 const idEventDef EV_SpectatorTouch( "<spectatorTouch>", "et" );	// HUMANHEAD pdm: <hide> from scripts since it's got a trace parm
 
+static float Player_CalcAspectAgnosticZoomFov( float zoomFov ) {
+	// Weapon zoom defs are authored against the 4:3 gameplay FOV baseline.
+	// Convert to the active aspect so scoped horizontal magnification stays consistent.
+	const float clampedZoomFov = idMath::ClampFloat( 1.0f, 179.0f, zoomFov );
+	const float referenceAspect = 4.0f / 3.0f;
+	const float currentAspect = idMath::ClampFloat( 0.1f, 10.0f, gameLocal.GetScreenAspectRatio() );
+
+	if ( idMath::Fabs( currentAspect - referenceAspect ) < 0.001f ) {
+		return clampedZoomFov;
+	}
+
+	const float halfZoomFov = DEG2RAD( clampedZoomFov * 0.5f );
+	const float aspectScale = referenceAspect / currentAspect;
+	const float adjustedHalfFov = idMath::ATan( idMath::Tan( halfZoomFov ) * aspectScale );
+
+	return idMath::ClampFloat( 1.0f, 179.0f, RAD2DEG( adjustedHalfFov ) * 2.0f );
+}
+
 CLASS_DECLARATION( idActor, idPlayer )
 	EVENT( EV_Player_GetButtons,			idPlayer::Event_GetButtons )
 	EVENT( EV_Player_GetMove,				idPlayer::Event_GetMove )
@@ -5254,7 +5272,8 @@ void idPlayer::Think( void ) {
 	// zooming
 	if ( ( usercmd.buttons ^ oldCmd.buttons ) & BUTTON_ZOOM ) {
 		if ( ( usercmd.buttons & BUTTON_ZOOM ) && weapon.GetEntity() ) {
-			zoomFov.Init( gameLocal.time, 200.0f, CalcFov( false ), weapon.GetEntity()->GetZoomFov() );
+			const float zoomTargetFov = Player_CalcAspectAgnosticZoomFov( static_cast<float>( weapon.GetEntity()->GetZoomFov() ) );
+			zoomFov.Init( gameLocal.time, 200.0f, CalcFov( false ), zoomTargetFov );
 		} else {
 			zoomFov.Init( gameLocal.time, 200.0f, zoomFov.GetCurrentValue( gameLocal.time ), DefaultFov() );
 		}
@@ -5912,7 +5931,8 @@ float idPlayer::CalcFov( bool honorZoom ) {
 	}
 
 	if ( zoomFov.IsDone( gameLocal.time ) ) {
-		fov = ( honorZoom && usercmd.buttons & BUTTON_ZOOM ) && weapon.GetEntity() ? weapon.GetEntity()->GetZoomFov() : DefaultFov();
+		const float zoomTargetFov = weapon.GetEntity() ? Player_CalcAspectAgnosticZoomFov( static_cast<float>( weapon.GetEntity()->GetZoomFov() ) ) : DefaultFov();
+		fov = ( honorZoom && ( usercmd.buttons & BUTTON_ZOOM ) && weapon.GetEntity() ) ? zoomTargetFov : DefaultFov();
 	} else {
 		fov = zoomFov.GetCurrentValue( gameLocal.time );
 	}

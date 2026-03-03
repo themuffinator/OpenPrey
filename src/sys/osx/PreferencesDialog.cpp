@@ -173,13 +173,6 @@ void Sys_DoPreferences( void ) {
 					cvarSystem->SetCVarInteger( "r_customHeight", info.height );
 				}
 
-				float r = (float) info.width / (float) info.height;
-				if ( r > 1.7f )
-					cvarSystem->SetCVarInteger( "r_aspectRatio", 1 );	// 16:9
-				else if ( r > 1.55f )
-					cvarSystem->SetCVarInteger( "r_aspectRatio", 2 );	// 16:10
-				else
-					cvarSystem->SetCVarInteger( "r_aspectRatio", 0 );	// 4:3
 				
 				r_stretched.SetBool( info.resFlags & kRes_Stretched );
 				cvarSystem->SetCVarInteger( "r_screen", GetScreenIndexForDisplayID( info.displayID ) );

@@ -67,8 +67,8 @@ extern idCVar	developer;
 
 extern idCVar	g_cinematic;
 extern idCVar	g_cinematicMaxSkipTime;
-
-extern idCVar	r_aspectRatio;
+// jnewquist: vertical stretch for letterboxed cinematics authored for 4:3 aspect
+extern idCVar	g_fixedHorizFOV;
 
 extern idCVar	g_monsters;
 extern idCVar	g_decals;

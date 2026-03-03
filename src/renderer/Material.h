@@ -136,6 +136,9 @@ typedef enum {
 	EXP_REG_VERTEX_RANDOM,
 	EXP_REG_FRAGMENT_PROGRAMS,
 	EXP_REG_GLSL_PROGRAMS,
+	EXP_REG_SCOPE_VIEW,
+	EXP_REG_SPIRIT_WALK,
+	EXP_REG_SHUTTLE_VIEW,
 
 	EXP_REG_NUM_PREDEFINED
 } expRegister_t;
@@ -273,6 +276,13 @@ typedef enum {
 
 	SS_POST_PROCESS = 100	// after a screen copy to texture
 } materialSort_t;
+
+// HUMANHEAD tmj: type of subview that this surface represents.
+typedef enum {
+	SC_MIRROR,
+	SC_PORTAL,
+	SC_PORTAL_SKYBOX,
+} subviewClass_t;
 
 typedef enum {
 	CT_FRONT_SIDED,
@@ -710,6 +720,8 @@ public:
 
 	bool				SuppressInSubview() const { return suppressInSubview; };
 	bool				IsPortalSky() const { return portalSky; };
+	subviewClass_t		GetSubviewClass( void ) const { return subviewClass; }
+	int					GetDirectPortalDistance() const { return directPortalDistance; } // HUMANHEAD CJR:  direct render portal distance cull
 	void				AddReference();
 
 private:
@@ -775,6 +787,9 @@ private:
 	bool				noFog;				// surface does not create fog interactions
 
 	int					spectrum;			// for invisible writing, used for both lights and surfaces
+
+	subviewClass_t		subviewClass;		// HUMANHEAD tmj: Type of subview this surface points to
+	int					directPortalDistance; // HUMANHEAD:  Distance at which direct render portals are drawn
 
 	float				polygonOffset;
 

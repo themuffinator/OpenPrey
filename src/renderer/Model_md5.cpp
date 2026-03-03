@@ -775,7 +775,7 @@ idRenderModel *idRenderModelMD5::InstantiateDynamicModel( const struct renderEnt
 		// avoid deforming the surface if it will be a nodraw due to a skin remapping
 		// FIXME: may have to still deform clipping hulls
 		const idMaterial *shader = mesh->shader;
-		
+
 		shader = R_RemapShaderBySkin( shader, ent->customSkin, ent->customShader );
 		
 		if ( !shader || ( !shader->IsDrawn() && !shader->SurfaceCastsShadow() ) ) {

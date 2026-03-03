@@ -31,13 +31,6 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "tr_local.h"
 
-static ID_INLINE int R_EffectiveViewIDForSubview( const viewDef_t *viewDef ) {
-	if ( viewDef != NULL && viewDef->isSubview ) {
-		return 0;
-	}
-	return ( viewDef != NULL ) ? viewDef->renderView.viewID : 0;
-}
-
 /*
 ===========================================================================
 
@@ -1076,6 +1069,18 @@ void idInteraction::AddActiveInteraction( void ) {
 		return;
 	}
 
+	// If in spirit walk mode, hide entities flagged as invisible in spirit;
+	// otherwise hide entities flagged as only visible in spirit.
+	if ( tr.viewDef->renderView.viewSpiritEntities ) {
+		if ( entityDef->parms.onlyInvisibleInSpirit ) {
+			return;
+		}
+	} else {
+		if ( entityDef->parms.onlyVisibleInSpirit ) {
+			return;
+		}
+	}
+
 	// the dynamic model may have changed since we built the surface list
 	if ( !IsDeferred() && entityDef->dynamicModelFrameCount != dynamicModelFrameCount ) {
 		FreeSurfaces();
@@ -1184,9 +1189,8 @@ void idInteraction::AddActiveInteraction( void ) {
 			
 			// check for view specific shadow suppression (player shadows, etc)
 			if ( !r_skipSuppress.GetBool() ) {
-				const int viewID = R_EffectiveViewIDForSubview( tr.viewDef );
 				if ( entityDef->parms.suppressShadowInViewID &&
-					entityDef->parms.suppressShadowInViewID == viewID ) {
+					entityDef->parms.suppressShadowInViewID == tr.viewDef->renderView.viewID ) {
 					continue;
 				}
 				if ( entityDef->parms.suppressShadowInLightID &&

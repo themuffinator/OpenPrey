@@ -609,6 +609,7 @@ public:
 	void					SetCamera( idCamera *cam );
 	idCamera *				GetCamera( void ) const;
 	bool					SkipCinematic( void );
+	float					GetScreenAspectRatio( void ) const;
 	void					CalcFov( float base_fov, float &fov_x, float &fov_y ) const;
 
 	void					AddEntityToHash( const char *name, idEntity *ent );

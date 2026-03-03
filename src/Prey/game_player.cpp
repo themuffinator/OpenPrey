@@ -55,6 +55,24 @@ const idEventDef EV_CanAnimateTorso( "canAnimateTorso", "", 'd' ); //rww
 idCVar g_enableLighter( "g_enableLighter", "0", CVAR_GAME | CVAR_BOOL | CVAR_ARCHIVE,
 	"enable player lighter dynamic light (disabled by default in OpenPrey)" );
 
+static float Player_CalcAspectAgnosticZoomFov( float zoomFov ) {
+	// Weapon zoom defs are authored against the 4:3 gameplay FOV baseline.
+	// Convert to the active aspect so scoped horizontal magnification stays consistent.
+	const float clampedZoomFov = idMath::ClampFloat( 1.0f, 179.0f, zoomFov );
+	const float referenceAspect = 4.0f / 3.0f;
+	const float currentAspect = idMath::ClampFloat( 0.1f, 10.0f, gameLocal.GetScreenAspectRatio() );
+
+	if ( idMath::Fabs( currentAspect - referenceAspect ) < 0.001f ) {
+		return clampedZoomFov;
+	}
+
+	const float halfZoomFov = DEG2RAD( clampedZoomFov * 0.5f );
+	const float aspectScale = referenceAspect / currentAspect;
+	const float adjustedHalfFov = idMath::ATan( idMath::Tan( halfZoomFov ) * aspectScale );
+
+	return idMath::ClampFloat( 1.0f, 179.0f, RAD2DEG( adjustedHalfFov ) * 2.0f );
+}
+
 CLASS_DECLARATION( idPlayer, hhPlayer )
 	EVENT( EV_PlayWeaponAnim,				hhPlayer::Event_PlayWeaponAnim )
 	EVENT( EV_RechargeHealth,				hhPlayer::Event_RechargeHealth )
@@ -390,8 +408,10 @@ void hhPlayer::Init() {
 	StopSound(SND_CHANNEL_HEART, false); //rww - make sure this is stopped here, could conceivably still be playing on respawn
 	bPlayingLowHealthSound = false;
 
-	// Set shuttle view off
+	// Reset local renderer view-mode flags.
 	if (entityNumber == gameLocal.localClientNum) { //rww
+		renderSystem->SetScopeView( false );
+		renderSystem->SetSpiritWalkView( false );
 		renderSystem->SetShuttleView( false );
 	}
 
@@ -4068,6 +4088,9 @@ void hhPlayer::EnableEthereal( const char *proxyName, const idVec3& origin, cons
 
 	// Set the player into spiritwalk mode
 	bSpiritWalk = true;
+	if ( entityNumber == gameLocal.localClientNum ) {
+		renderSystem->SetSpiritWalkView( true );
+	}
 }
 
 //=============================================================================
@@ -4095,6 +4118,9 @@ void hhPlayer::DisableEthereal( void ) {
 	}
 
 	bSpiritWalk = false;
+	if ( entityNumber == gameLocal.localClientNum ) {
+		renderSystem->SetSpiritWalkView( false );
+	}
 
 	// Spawn in an effect when the spirit is snapped back
 	GetJointWorldTransform( "waist", boneOffset, boneAxis );	
@@ -4910,7 +4936,8 @@ void hhPlayer::Think( void ) {
 	// zooming
 	if ( ( usercmd.buttons ^ oldCmd.buttons ) & BUTTON_ZOOM ) {
 		if ( ( usercmd.buttons & BUTTON_ZOOM ) && weapon.GetEntity() ) {
-			zoomFov.Init( gameLocal.time, 200.0f, CalcFov( false ), weapon.GetEntity()->GetZoomFov() );
+			const float zoomTargetFov = Player_CalcAspectAgnosticZoomFov( static_cast<float>( weapon.GetEntity()->GetZoomFov() ) );
+			zoomFov.Init( gameLocal.time, 200.0f, CalcFov( false ), zoomTargetFov );
 		} else {
 			zoomFov.Init( gameLocal.time, 200.0f, zoomFov.GetCurrentValue( gameLocal.time ), DefaultFov() );
 		}
@@ -6268,6 +6295,9 @@ void hhPlayer::ReadFromSnapshot( const idBitMsgDelta &msg ) {
 			SetSkinByName( NULL );
 		}
 	}
+	if ( entityNumber == gameLocal.localClientNum ) {
+		renderSystem->SetSpiritWalkView( bSpiritWalk );
+	}
 
 	//not needed anymore
 	/*
@@ -6566,11 +6596,13 @@ void hhPlayer::ReadPlayerStateFromSnapshot( const idBitMsgDelta &msg ) {
 	float zfStT = msg.ReadFloat();
 	float zfStV = msg.ReadFloat();
 
-	renderSystem->SetShuttleView( InVehicle() );
+	if ( entityNumber == gameLocal.localClientNum ) {
+		renderSystem->SetShuttleView( InVehicle() );
+	}
 
 	if (canOverrideView) { //if we are currently allowed to override with snapshot values, do so.
 		bScopeView = scopeView;
-		if (bScopeView != renderSystem->IsScopeView()) {
+		if (entityNumber == gameLocal.localClientNum && bScopeView != renderSystem->IsScopeView()) {
 			renderSystem->SetScopeView(bScopeView);
 		}
 		zoomFov.SetDuration(zfDur);
@@ -7177,14 +7209,15 @@ void hhPlayer::Restore( idRestoreGame *savefile ) {
 		// Keep orientation correct in vehicles
 		RestoreOrientation( GetOrigin(), axis, axis0, axis0.ToAngles() );
 
-		//HUMANHEAD PCF mdl 05/02/06 - Added this to re-enable shuttle view
-		if (renderSystem) {
-			// Set shuttle view
-			renderSystem->SetShuttleView( true );
-		}
 	} else {
 		// Keep orientation correct for walkwalk and gravity rooms
 		RestoreOrientation( GetOrigin(), physicsObj.GetAxis(), viewAngles.ToMat3()[0], untransformedViewAngles );
+	}
+
+	if ( renderSystem && entityNumber == gameLocal.localClientNum ) {
+		renderSystem->SetScopeView( bScopeView );
+		renderSystem->SetSpiritWalkView( bSpiritWalk );
+		renderSystem->SetShuttleView( InVehicle() );
 	}
 
 	//HUMANHEAD PCF mdl 04/28/06 - Moved camera interpolater down here to fix jump off wallwalk view angle problem

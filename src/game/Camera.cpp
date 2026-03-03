@@ -207,6 +207,11 @@ void idCameraView::GetViewParms( renderView_t *view ) {
 		ent = this;
 	}
 
+	// HUMANHEAD pdm: allow non-zero viewID when needed for using privateCameraView bound to player model
+	if ( bPlayerBoundCamera ) {
+		view->viewID = gameLocal.GetLocalPlayer()->entityNumber + 1;
+	}
+
 	// HUMANHEAD mdl:  ent and ent->GetPhysics() must be non-NULL
 	if ( !ent || !ent->GetPhysics() ) {
 #if !GOLD

@@ -28,4 +28,5 @@ install_subdir(
 install_subdir(
   'guis',
   install_dir: install_gamedir_dir,
+  exclude_directories: ['assets'],
 )

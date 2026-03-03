@@ -9,10 +9,10 @@
   M4_PRODUCT
   <option required="true">
 	M4_DESC
-	<binary arch="any" libs="any" symlink="doom3" icon="doom3.png" play="no">
+	<binary arch="any" libs="any" symlink="doom3" icon="assets/icons/prey_256.png" play="no">
 	  doom3
 	</binary>
-	<binary arch="any" libs="any" symlink="doom3-dedicated" icon="doom3.png" play="no">
+	<binary arch="any" libs="any" symlink="doom3-dedicated" icon="assets/icons/prey_256.png" play="no">
 	  doom3-dedicated
 	</binary>
 	<binary arch="any" libs="any" play="no">
@@ -26,7 +26,7 @@
 	  M4_LDD
 	  version.info
 	  openurl.sh
-	  doom3.png
+	  assets/icons/prey_256.png
 	  CHANGES
 	</files>
   </option>

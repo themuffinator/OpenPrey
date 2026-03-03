@@ -337,6 +337,30 @@ bool idRenderSystemLocal::GetUseUIViewportFor2D( void ) const {
 	return useUIViewportFor2D;
 }
 
+bool idRenderSystemLocal::IsScopeView( void ) {
+	return scopeViewEnabled;
+}
+
+void idRenderSystemLocal::SetScopeView( bool view ) {
+	scopeViewEnabled = view;
+}
+
+bool idRenderSystemLocal::IsSpiritWalkView( void ) {
+	return spiritWalkViewEnabled;
+}
+
+void idRenderSystemLocal::SetSpiritWalkView( bool view ) {
+	spiritWalkViewEnabled = view;
+}
+
+bool idRenderSystemLocal::IsShuttleView( void ) {
+	return shuttleViewEnabled;
+}
+
+void idRenderSystemLocal::SetShuttleView( bool view ) {
+	shuttleViewEnabled = view;
+}
+
 /*
 =============
 DrawStretchTri

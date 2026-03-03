@@ -127,6 +127,8 @@ void idMaterial::CommonInit() {
 	spectrum = 0;
 	polygonOffset = 0;
 	suppressInSubview = false;
+	subviewClass = SC_MIRROR;
+	directPortalDistance = -1;
 	refCount = 0;
 	portalSky = false;
 // jmarshall - quake 4
@@ -715,6 +717,23 @@ int idMaterial::ParseTerm( idLexer &src ) {
 	if ( !token.Icmp( "glslPrograms" ) ) {
 		pd->registersAreConstant = false;
 		return EXP_REG_GLSL_PROGRAMS;
+	}
+	if ( !token.Icmp( "scopeView" ) ) {
+		pd->registersAreConstant = false;
+		return EXP_REG_SCOPE_VIEW;
+	}
+	if ( !token.Icmp( "spiritWalk" ) ) {
+		pd->registersAreConstant = false;
+		return EXP_REG_SPIRIT_WALK;
+	}
+	if ( !token.Icmp( "shuttleView" ) ) {
+		pd->registersAreConstant = false;
+		return EXP_REG_SHUTTLE_VIEW;
+	}
+	if ( !token.Icmp( "notScopeView" ) ) {
+		pd->registersAreConstant = false;
+		const int zeroRegister = GetExpressionConstant( 0.0f );
+		return EmitOp( EXP_REG_SCOPE_VIEW, zeroRegister, OP_TYPE_EQ );
 	}
 	if ( !token.Icmp( "POTCorrectionX" ) ) {
 		const int width = Max( 1, glConfig.vidWidth );
@@ -1958,7 +1977,29 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 			continue;
 		}
 		if ( !token.Icmp( "scopeView" ) || !token.Icmp( "notScopeView" ) || !token.Icmp( "spiritWalk" ) || !token.Icmp( "shuttleView" ) ) {
-			// View-mode hints; keep parsing material stages without defaulting.
+			int viewModeRegister = -1;
+			bool invertViewMode = false;
+
+			if ( !token.Icmp( "scopeView" ) ) {
+				viewModeRegister = EXP_REG_SCOPE_VIEW;
+			} else if ( !token.Icmp( "notScopeView" ) ) {
+				viewModeRegister = EXP_REG_SCOPE_VIEW;
+				invertViewMode = true;
+			} else if ( !token.Icmp( "spiritWalk" ) ) {
+				viewModeRegister = EXP_REG_SPIRIT_WALK;
+			} else {
+				viewModeRegister = EXP_REG_SHUTTLE_VIEW;
+			}
+
+			if ( viewModeRegister != -1 ) {
+				pd->registersAreConstant = false;
+				int viewConditionRegister = viewModeRegister;
+				if ( invertViewMode ) {
+					const int zeroRegister = GetExpressionConstant( 0.0f );
+					viewConditionRegister = EmitOp( viewModeRegister, zeroRegister, OP_TYPE_EQ );
+				}
+				ss->conditionRegister = EmitOp( ss->conditionRegister, viewConditionRegister, OP_TYPE_AND );
+			}
 			continue;
 		}
 
@@ -2343,16 +2384,24 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 			materialType = declManager->FindMaterialType(token);
 			continue;
 		}
-		else if ( !token.Icmp( "directportal" ) ) {
-			// Prey direct portals require subview sorting; distance logic remains stage-driven.
+		else if ( !token.Icmp( "directportal" ) ) { // with a parm: e.g. directportal parm5
+			directPortalDistance = ParseExpression( src );
 			sort = SS_SUBVIEW;
-			if ( src.ReadTokenOnLine( &token ) ) {
-				src.UnreadToken( &token );
-				ParseExpression( src );
-			}
+			subviewClass = SC_PORTAL;
+			coverage = MC_OPAQUE;
+			SetMaterialFlag( MF_NOSHADOWS );
+			idToken t;
+			t = "discrete";
+			CheckSurfaceParm( &t );
 			continue;
 		}
-// jmarshall end
+		else if ( !token.Icmp( "skyboxportal" ) ) {
+			src.SkipRestOfLine();
+			sort = SS_SUBVIEW;
+			subviewClass = SC_PORTAL_SKYBOX;
+			continue;
+		}
+		// jmarshall end
 		else if ( !token.Icmp( "portalDistanceNear" ) ) {
 			portalDistanceNear = src.ParseFloat();
 			continue;
@@ -2683,7 +2732,7 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 		// Legacy Prey authoring macros/flags that should not default the material.
 		// These declarations already contain explicit stages; treat these as no-op metadata.
 		else if ( !token.Icmp( "glass_macro" ) || !token.Icmp( "skybox_macro" ) ||
-			!token.Icmp( "skyboxportal" ) || !token.Icmp( "seeThru" ) ) {
+			!token.Icmp( "seeThru" ) || !token.Icmp( "noSeeThru" ) ) {
 			continue;
 		}
 		else if ( token == "{" ) {
@@ -3088,6 +3137,9 @@ void idMaterial::EvaluateRegisters( float *registers, const float shaderParms[MA
 	registers[EXP_REG_FRAGMENT_PROGRAMS] =
 		( glConfig.allowARB2Path && r_useFragmentProgramMaterials.GetBool() ) ? 1.0f : 0.0f;
 	registers[EXP_REG_GLSL_PROGRAMS] = glConfig.GLSLProgramAvailable ? 1.0f : 0.0f;
+	registers[EXP_REG_SCOPE_VIEW] = renderSystem->IsScopeView() ? 1.0f : 0.0f;
+	registers[EXP_REG_SPIRIT_WALK] = renderSystem->IsSpiritWalkView() ? 1.0f : 0.0f;
+	registers[EXP_REG_SHUTTLE_VIEW] = renderSystem->IsShuttleView() ? 1.0f : 0.0f;
 
 	op = ops;
 	for ( i = 0 ; i < numOps ; i++, op++ ) {

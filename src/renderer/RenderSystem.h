@@ -314,6 +314,8 @@ public:
 	virtual void			SetEntireSceneMaterial( idMaterial *material ) { (void)material; }
 	virtual bool			IsScopeView( void ) { return false; }
 	virtual void			SetScopeView( bool view ) { (void)view; }
+	virtual bool			IsSpiritWalkView( void ) { return false; }
+	virtual void			SetSpiritWalkView( bool view ) { (void)view; }
 	virtual bool			IsShuttleView( void ) { return false; }
 	virtual void			SetShuttleView( bool view ) { (void)view; }
 	virtual bool			SupportsFragmentPrograms( void ) { return true; }

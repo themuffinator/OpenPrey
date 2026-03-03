@@ -50,3 +50,6 @@ _tmp_*
 /.home/
 *.pdb
 $dst/
+*.bimage
+.install/*.cfg
+.install/openprey/*.cfg

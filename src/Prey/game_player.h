@@ -739,13 +739,6 @@ hhPlayer::GetPortalPoint
 */
 ID_INLINE idVec3 hhPlayer::GetPortalPoint( void ) {
 	return idEntity::GetPortalPoint();
-/*
-	idVec3 origin;
-	idMat3 axis;
-
-	GetViewPos( origin, axis );
-	return origin; // Compensate for the near-clip plane
-*/
 }
 
 //HUMANHEAD rww
