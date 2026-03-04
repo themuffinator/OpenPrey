@@ -1995,9 +1995,37 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 			continue;
 		}
 		if ( !token.Icmpn( "shaderlevel", 11 ) ) {
+			const char *suffix = token.c_str() + 11;
+			if ( suffix[0] < '1' || suffix[0] > '3' || suffix[1] != '\0' ) {
+				src.Warning( "bad shader level token '%s' in material '%s'", token.c_str(), GetName() );
+				SetMaterialFlag( MF_DEFAULTED );
+				return;
+			}
+
+			// Match retail behavior: shaderLevelN stages are only active when
+			// r_shaderLevel >= N and r_skipNewAmbient is not forcing legacy ambient.
+			const int shaderLevel = suffix[0] - '0';
+			if ( r_shaderLevel.GetInteger() < shaderLevel || r_skipNewAmbient.GetBool() ) {
+				src.SkipBracedSection( false );
+				return;
+			}
 			continue;
 		}
 		if ( !token.Icmpn( "shaderfallback", 14 ) ) {
+			const char *suffix = token.c_str() + 14;
+			if ( suffix[0] < '1' || suffix[0] > '3' || suffix[1] != '\0' ) {
+				src.Warning( "bad shader fallback token '%s' in material '%s'", token.c_str(), GetName() );
+				SetMaterialFlag( MF_DEFAULTED );
+				return;
+			}
+
+			// Match retail behavior: shaderFallbackN stages are active when
+			// r_shaderLevel < N, or when r_skipNewAmbient is forcing fallback ambient.
+			const int shaderLevel = suffix[0] - '0';
+			if ( r_shaderLevel.GetInteger() >= shaderLevel && !r_skipNewAmbient.GetBool() ) {
+				src.SkipBracedSection( false );
+				return;
+			}
 			continue;
 		}
 		if ( !token.Icmp( "highres" ) ) {
@@ -2408,6 +2436,11 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 		}
 		else if (!token.Icmp("noseethru")) {
 			// Legacy editor metadata; no runtime rendering effect.
+			continue;
+		}
+		else if ( !token.Icmp( "lightWholeMesh" ) ) {
+			// Prey authoring hint used by vertex-painted blend materials.
+			// Keep as a recognized no-op so these materials don't default.
 			continue;
 		}
 // jmarshall end
