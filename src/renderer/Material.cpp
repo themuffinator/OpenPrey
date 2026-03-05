@@ -2801,7 +2801,7 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 		}
 		// Legacy Prey authoring macros/flags that should not default the material.
 		// These declarations already contain explicit stages; treat these as no-op metadata.
-		else if ( !token.Icmp( "glass_macro" ) || !token.Icmp( "skybox_macro" ) ||
+		else if ( !token.Icmp( "skipClip" ) || !token.Icmp( "glass_macro" ) || !token.Icmp( "skybox_macro" ) ||
 			!token.Icmp( "seeThru" ) || !token.Icmp( "noSeeThru" ) ) {
 			continue;
 		}

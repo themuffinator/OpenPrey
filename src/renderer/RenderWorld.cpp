@@ -1095,8 +1095,12 @@ start / end are in global world coordinates.
 ================
 */
 guiPoint_t	idRenderWorldLocal::GuiTrace( qhandle_t entityHandle, const idVec3 start, const idVec3 end ) const {
+	return GuiTrace( entityHandle, start, end, 0 );
+}
+
+guiPoint_t	idRenderWorldLocal::GuiTrace( qhandle_t entityHandle, const idVec3 start, const idVec3 end, int interactiveMask ) const {
 	localTrace_t	local;
-	idVec3			localStart, localEnd, bestPoint;
+	idVec3			localStart, localEnd;
 	int				j;
 	idRenderModel	*model;
 	srfTriangles_t	*tri;
@@ -1128,9 +1132,6 @@ guiPoint_t	idRenderWorldLocal::GuiTrace( qhandle_t entityHandle, const idVec3 st
 	R_GlobalPointToLocal( def->modelMatrix, end, localEnd );
 
 
-	float best = 99999.0;
-	const modelSurface_t *bestSurf = NULL;
-
 	for ( j = 0 ; j < model->NumSurfaces() ; j++ ) {
 		const modelSurface_t *surf = model->Surface( j );
 
@@ -1146,6 +1147,16 @@ guiPoint_t	idRenderWorldLocal::GuiTrace( qhandle_t entityHandle, const idVec3 st
 		// only trace against gui surfaces
 		if (!shader->HasGui()) {
 			continue;
+		}
+
+		if ( interactiveMask != 0 ) {
+			const int guiId = shader->GetEntityGui();
+			if ( guiId < 1 || guiId > MAX_RENDERENTITY_GUI ) {
+				continue;
+			}
+			if ( ( interactiveMask & ( 1 << ( guiId - 1 ) ) ) == 0 ) {
+				continue;
+			}
 		}
 
 		local = R_LocalTrace( localStart, localEnd, 0.0f, tri );

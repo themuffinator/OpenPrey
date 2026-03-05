@@ -1190,6 +1190,7 @@ void idSoundWorldLocal::ReadFromSaveGame( idFile* savefile )
 			savefile->ReadInt( sf.fadeEndTime );
 			savefile->ReadFloat( sf.fadeStartVolume );
 			savefile->ReadFloat( sf.fadeEndVolume );
+			sf.fadeHold = false;
 			if( sf.fadeEndTime > 0 )
 			{
 				sf.fadeStartTime += timeDelta;

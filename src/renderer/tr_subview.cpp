@@ -254,11 +254,8 @@ static viewDef_t *R_MirrorViewBySurface( drawSurf_t *drawSurf ) {
 
 	R_LocalPointToGlobal( drawSurf->space->modelMatrix, viewOrigin, parms->initialViewAreaOrigin );
 
-	// set the mirror clip plane
-	parms->numClipPlanes = 1;
-	parms->clipPlanes[0] = -camera.axis[0];
-
-	parms->clipPlanes[0][3] = -( camera.origin * parms->clipPlanes[0].Normal() );
+	// Keep mirrors unclipped for now; retail parity work continues but this preserves Tommy reflection.
+	parms->numClipPlanes = 0;
 	
 	return parms;
 }
@@ -569,6 +566,7 @@ bool	R_GenerateSurfaceSubview( drawSurf_t *drawSurf ) {
 			parms->renderView.viewaxis = idMat3( forward2, left2, up2 );
 			parms->initialViewAreaOrigin = remoteRenderView->vieworg + remoteRenderView->viewaxis[0] * 16.0f;
 			parms->renderView.vieworg = remoteRenderView->vieworg;
+			parms->scissor = scissor;
 
 			parms->superView = tr.viewDef;
 			parms->subviewSurface = drawSurf;
@@ -599,6 +597,7 @@ bool	R_GenerateSurfaceSubview( drawSurf_t *drawSurf ) {
 			parms->renderView.viewID = 0;	// clear to allow player bodies to show up, and suppress view weapons
 			parms->initialViewAreaOrigin = remoteRenderView->vieworg;
 			parms->renderView.vieworg = remoteRenderView->vieworg;
+			parms->scissor = scissor;
 
 			parms->superView = tr.viewDef;
 			parms->subviewSurface = drawSurf;

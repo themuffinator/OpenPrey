@@ -56,8 +56,7 @@ typedef struct portalStack_s {
 	// positive side is outside the visible frustum
 } portalStack_t;
 
-// Subviews (mirrors/remote cameras) should always behave like viewID 0 for
-// suppress/allow tests so player bodies can appear while view weapons stay hidden.
+// Mirrors/remote subviews must evaluate suppress/allow as viewID 0.
 static ID_INLINE int R_EffectiveViewIDForSubview() {
 	if ( tr.viewDef != NULL && tr.viewDef->isSubview ) {
 		return 0;

@@ -198,6 +198,7 @@ public:
 	int		fadeEndTime;
 	float	fadeStartVolume;
 	float	fadeEndVolume;
+	bool	fadeHold;
 
 
 public:
@@ -209,6 +210,7 @@ public:
 	void	Clear();
 	void	SetVolume( float to );
 	void	Fade( float to, int length, int soundTime );
+	void	FadeFrom( float to, int delay, int length, int soundTime );
 
 	float	GetVolume( int soundTime ) const;
 };

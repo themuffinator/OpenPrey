@@ -75,6 +75,7 @@ void idSoundFade::Clear()
 	fadeEndTime = 0;
 	fadeStartVolume = 0.0f;
 	fadeEndVolume = 0.0f;
+	fadeHold = false;
 }
 
 /*
@@ -88,6 +89,7 @@ void idSoundFade::SetVolume( float to )
 	fadeEndVolume = to;
 	fadeStartTime = 0;
 	fadeEndTime = 0;
+	fadeHold = false;
 }
 
 /*
@@ -99,7 +101,7 @@ void idSoundFade::Fade( float to, int length, int soundTime )
 {
 	int startTime = soundTime;
 	// if it is already fading to this volume at this rate, don't change it
-	if( fadeEndTime == startTime + length && fadeEndVolume == to )
+	if( !fadeHold && fadeEndTime == startTime + length && fadeEndVolume == to )
 	{
 		return;
 	}
@@ -107,6 +109,30 @@ void idSoundFade::Fade( float to, int length, int soundTime )
 	fadeEndVolume = to;
 	fadeStartTime = startTime;
 	fadeEndTime = startTime + length;
+	fadeHold = false;
+}
+
+/*
+========================
+idSoundFade::FadeFrom
+========================
+*/
+void idSoundFade::FadeFrom( float to, int delay, int length, int soundTime )
+{
+	const int startTime = soundTime + Max( 0, delay );
+	const int endTime = startTime + Max( 0, length );
+
+	// Hold fades are windowed: force the target volume only between [start, end].
+	if( fadeHold && fadeStartTime == startTime && fadeEndTime == endTime && fadeEndVolume == to )
+	{
+		return;
+	}
+
+	fadeStartVolume = GetVolume( soundTime );
+	fadeEndVolume = to;
+	fadeStartTime = startTime;
+	fadeEndTime = endTime;
+	fadeHold = true;
 }
 
 /*
@@ -116,6 +142,15 @@ idSoundFade::GetVolume
 */
 float idSoundFade::GetVolume( const int soundTime ) const
 {
+	if( fadeHold )
+	{
+		if( soundTime >= fadeStartTime && soundTime <= fadeEndTime )
+		{
+			return fadeEndVolume;
+		}
+		return fadeStartVolume;
+	}
+
 	const float fadeDuration = ( fadeEndTime - fadeStartTime );
 	const int currentTime = soundTime;
 	const float playTime = ( currentTime - fadeStartTime );
@@ -1051,20 +1086,14 @@ int idSoundEmitterLocal::StartSound( const idSoundShader* shader, const s_channe
 		chan->endTime = chan->startTime + length + 100;
 	}
 
-	// Retail Prey profanity censoring: when active, apply a delayed fade to silence
-	// for authored bleep segments on the selected random sample.
+	// Retail Prey profanity censoring: apply a temporary mute window over the
+	// authored profanity interval, then restore the pre-window channel volume.
 	if( IsProfanityCensorEnabled() && chanParms.profanityDuration > 0.0f && chanParms.profanityIndex == choice )
 	{
 		const int fadeDelayMS = Max( 0, SEC2MS( chanParms.profanityDelay ) );
 		const int fadeLengthMS = Max( 1, SEC2MS( chanParms.profanityDuration ) );
-		const int fadeStartTime = currentTime + fadeDelayMS;
-		const int fadeEndTime = fadeStartTime + fadeLengthMS;
 		const float fadeToDB = DB_SILENCE - VolumeScaleToDB( chan->parms.volume );
-
-		chan->volumeFade.fadeStartVolume = chan->volumeFade.GetVolume( fadeStartTime );
-		chan->volumeFade.fadeEndVolume = fadeToDB;
-		chan->volumeFade.fadeStartTime = fadeStartTime;
-		chan->volumeFade.fadeEndTime = fadeEndTime;
+		chan->volumeFade.FadeFrom( fadeToDB, fadeDelayMS, fadeLengthMS, currentTime );
 	}
 
 	if( showStartSound )

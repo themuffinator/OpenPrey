@@ -31,6 +31,14 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "tr_local.h"
 
+// Subviews (mirrors/remote cameras) should evaluate suppress checks as viewID 0.
+static ID_INLINE int R_EffectiveViewIDForSubview() {
+	if ( tr.viewDef != NULL && tr.viewDef->isSubview ) {
+		return 0;
+	}
+	return ( tr.viewDef != NULL ) ? tr.viewDef->renderView.viewID : 0;
+}
+
 /*
 ===========================================================================
 
@@ -1027,6 +1035,7 @@ void idInteraction::AddActiveInteraction( void ) {
 	idScreenRect	lightScissor;
 	idVec3			localLightOrigin;
 	idVec3			localViewOrigin;
+	const int		viewID = R_EffectiveViewIDForSubview();
 
 	vLight = lightDef->viewLight;
 	vEntity = entityDef->viewEntity;
@@ -1108,7 +1117,6 @@ void idInteraction::AddActiveInteraction( void ) {
 
 		// see if the base surface is visible, we may still need to add shadows even if empty
 		if ( !lightScissorsEmpty && sint->ambientTris && sint->ambientTris->ambientViewCount == tr.viewCount ) {
-
 			// make sure we have created this interaction, which may have been deferred
 			// on a previous use that only needed the shadow
 			if ( sint->lightTris == LIGHT_TRIS_DEFERRED ) {
@@ -1190,7 +1198,7 @@ void idInteraction::AddActiveInteraction( void ) {
 			// check for view specific shadow suppression (player shadows, etc)
 			if ( !r_skipSuppress.GetBool() ) {
 				if ( entityDef->parms.suppressShadowInViewID &&
-					entityDef->parms.suppressShadowInViewID == tr.viewDef->renderView.viewID ) {
+					entityDef->parms.suppressShadowInViewID == viewID ) {
 					continue;
 				}
 				if ( entityDef->parms.suppressShadowInLightID &&

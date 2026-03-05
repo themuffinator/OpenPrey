@@ -30,3 +30,13 @@ install_subdir(
   install_dir: install_gamedir_dir,
   exclude_directories: ['assets'],
 )
+
+install_subdir(
+  'maps',
+  install_dir: install_gamedir_dir,
+)
+
+install_subdir(
+  'script',
+  install_dir: install_gamedir_dir,
+)

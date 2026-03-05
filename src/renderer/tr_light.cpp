@@ -48,7 +48,7 @@ idCVar bse_useFrustumCull(
 	CVAR_RENDERER | CVAR_BOOL,
 	"if 1, apply renderer frustum culling to BSE effect defs/surfaces");
 
-// Subviews (mirrors/remote cameras) should behave as viewID 0 for suppress/allow.
+// Mirrors/remote subviews must evaluate suppress/allow as viewID 0.
 static ID_INLINE int R_EffectiveViewIDForSubview() {
 	if ( tr.viewDef != NULL && tr.viewDef->isSubview ) {
 		return 0;

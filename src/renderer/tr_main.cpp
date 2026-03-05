@@ -1098,43 +1098,9 @@ Parms will typically be allocated with R_FrameAlloc
 */
 void R_RenderView( viewDef_t *parms ) {
 	viewDef_t		*oldView;
-	int				subviewDepth;
-	static int		lastSubviewFrame = -1;
-	static int		subviewCountThisFrame = 0;
 
 	if ( parms->renderView.width <= 0 || parms->renderView.height <= 0 ) {
 		return;
-	}
-
-	if ( parms->isSubview ) {
-		if ( lastSubviewFrame != tr.frameCount ) {
-			lastSubviewFrame = tr.frameCount;
-			subviewCountThisFrame = 0;
-		}
-
-		subviewDepth = 0;
-		for ( const viewDef_t *view = parms; view != NULL; view = view->superView ) {
-			if ( view->isSubview ) {
-				subviewDepth++;
-			}
-		}
-
-		if ( subviewDepth > r_subviewMaxDepth.GetInteger() ) {
-			common->DPrintf( "R_RenderView: skipping subview depth %d (r_subviewMaxDepth=%d)\n", subviewDepth, r_subviewMaxDepth.GetInteger() );
-			return;
-		}
-
-		subviewCountThisFrame++;
-		if ( subviewCountThisFrame > r_subviewMaxCount.GetInteger() ) {
-			common->DPrintf( "R_RenderView: skipping subview count %d in frame %d (r_subviewMaxCount=%d)\n", subviewCountThisFrame, tr.frameCount, r_subviewMaxCount.GetInteger() );
-			return;
-		}
-	}
-
-	// Subviews (mirrors/remote cameras) must evaluate suppress/allow rules as
-	// viewID 0 so first-person entity suppression does not hide the player model.
-	if ( parms->isSubview ) {
-		parms->renderView.viewID = 0;
 	}
 
 	tr.viewCount++;
