@@ -862,6 +862,21 @@ void RB_CreateSingleDrawInteractions( const drawSurf_t *surf, void (*DrawInterac
 					inter.vertexColor = surfaceStage->vertexColor;
 					break;
 				}
+				case SL_INTERACTION: {
+					if ( !surfaceRegs[ surfaceStage->conditionRegister ] ) {
+						break;
+					}
+					RB_SubmittInteraction( &inter, DrawInteraction );
+					inter.bumpImage = NULL;
+					inter.diffuseImage = NULL;
+					inter.specularImage = NULL;
+					inter.diffuseColor[0] = inter.diffuseColor[1] = inter.diffuseColor[2] = inter.diffuseColor[3] = 0;
+					inter.specularColor[0] = inter.specularColor[1] = inter.specularColor[2] = inter.specularColor[3] = 0;
+					if ( tr.backEndRenderer == BE_ARB2 && surfaceStage->newStage ) {
+						RB_ARB2_DrawShaderInteraction( &inter, surfaceStage, surfaceRegs, lightColor );
+					}
+					break;
+				}
 			}
 		}
 
@@ -913,8 +928,12 @@ void RB_DrawView( const void *data ) {
 
 	RB_ShowOverdraw();
 
-	// render the scene, jumping to the hardware specific interaction renderers
-	RB_STD_DrawView();
+	// Retail Prey routes authored glow views through a dedicated backend path.
+	if ( backEnd.viewDef->isGlowView ) {
+		RB_STD_DrawGlowView();
+	} else {
+		RB_STD_DrawView();
+	}
 
 	// restore the context for 2D drawing if we were stubbing it out
 	if ( r_skipRenderContext.GetBool() && backEnd.viewDef->viewEntitys ) {

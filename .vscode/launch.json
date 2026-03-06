@@ -932,6 +932,7 @@
         "+map",
         "game/flashinghead"
       ],
+      ],
       "cwd": "${workspaceFolder}\\.install",
       "console": "integratedTerminal"
     }

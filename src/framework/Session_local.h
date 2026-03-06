@@ -161,7 +161,7 @@ public:
 	void				ScrubSaveGameFileName( idStr &saveFileName ) const;
 	idStr				GetAutoSaveName( const char *mapName ) const;
 
-	bool				LoadGame(const char *saveName);
+	bool				LoadGame(const char *saveName, const char *preferredGameDir = NULL);
 	bool				SaveGame(const char *saveName, bool autosave = false);
 	bool				HandleQuickLoad( void );
 
@@ -329,6 +329,7 @@ public:
 	// Session_menu.cpp
 
 	idStrList			loadGameList;
+	idStrList			loadGameListGameDirs;
 	idStrList			modsList;
 
 	idUserInterface *	GetActiveMenu();
@@ -343,9 +344,10 @@ public:
 	void				HandleRestartMenuCommands( const char *menuCommand );
 	void				HandleMsgCommands( const char *menuCommand );
 	void				HandleNoteCommands( const char *menuCommand );
-	void				GetSaveGameList( idStrList &fileList, idList<fileTIME_T> &fileTimes );
+	void				GetSaveGameList( idStrList &fileList, idList<fileTIME_T> &fileTimes, idStrList *gameDirs = NULL );
 	void				TakeNotes( const char * p, bool extended = false );
 	void				UpdateMPLevelShot( void );
+	void				RescanMaps( void );
 
 	void				SetSaveGameGuiVars( void );
 	void				SetMainMenuGuiVars( void );

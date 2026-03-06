@@ -54,6 +54,10 @@ idCVar r_bloomThreshold( "r_bloomThreshold", "0.72", CVAR_RENDERER | CVAR_ARCHIV
 idCVar r_bloomSoftKnee( "r_bloomSoftKnee", "0.15", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "bloom soft threshold knee", 0.0f, 1.0f );
 idCVar r_bloomIntensity( "r_bloomIntensity", "0.45", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "bloom contribution scale", 0.0f, 4.0f );
 idCVar r_bloomRadius( "r_bloomRadius", "1.35", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "bloom sample radius scale", 0.1f, 8.0f );
+idCVar r_glowAlpha( "r_glowAlpha", "0.55", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "start alpha used when blurring the glow texture", 0.0f, 4.0f );
+idCVar r_glowAlphaChange( "r_glowAlphaChange", "0.85", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "alpha change used when blurring the glow texture", 0.0f, 4.0f );
+idCVar r_glowSteps( "r_glowSteps", "8", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_INTEGER, "steps used when blurring the glow texture", 0, 256 );
+idCVar r_glowStrength( "r_glowStrength", "0.5", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "strength when drawing the final glow texture on screen", 0.0f, 4.0f );
 idCVar r_hdrToneMap( "r_hdrToneMap", "0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_BOOL, "enable HDR tonemapping and color correction pass" );
 idCVar r_hdrExposure( "r_hdrExposure", "1.0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "HDR tone mapping exposure", 0.1f, 8.0f );
 idCVar r_hdrSaturation( "r_hdrSaturation", "1.0", CVAR_RENDERER | CVAR_ARCHIVE | CVAR_FLOAT, "post-process saturation", 0.0f, 2.0f );

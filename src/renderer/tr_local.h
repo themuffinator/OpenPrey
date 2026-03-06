@@ -396,6 +396,7 @@ typedef struct viewDef_s {
 	bool				isSubview;				// true if this view is not the main view
 	bool				isMirror;				// the portal is a mirror, invert the face culling
 	bool				isXraySubview;
+	bool				isGlowView;				// retail Prey glow-only overlay pass
 
 	bool				isEditor;
 
@@ -895,6 +896,10 @@ extern idCVar r_bloomThreshold;		// bloom bright-pass threshold
 extern idCVar r_bloomSoftKnee;			// bloom soft threshold knee
 extern idCVar r_bloomIntensity;		// bloom contribution scale
 extern idCVar r_bloomRadius;			// bloom sample radius scale
+extern idCVar r_glowAlpha;				// starting blur alpha for retail glow
+extern idCVar r_glowAlphaChange;		// per-step glow blur alpha change
+extern idCVar r_glowSteps;				// number of glow blur steps
+extern idCVar r_glowStrength;			// final retail glow overlay strength
 extern idCVar r_hdrToneMap;			// enable HDR tonemapping and color correction
 extern idCVar r_hdrExposure;			// HDR tonemap exposure
 extern idCVar r_hdrSaturation;			// post-process saturation
@@ -974,7 +979,7 @@ extern idCVar r_lightAllBackFaces;		// light all the back faces, even when they 
 extern idCVar r_useDepthBoundsTest;     // use depth bounds test to reduce shadow fill
 
 extern idCVar r_skipPostProcess;		// skip all post-process renderings
-extern idCVar r_skipGlowOverlay;		// skip glow overlay stages and bloom
+extern idCVar r_skipGlowOverlay;		// skip the retail glow overlay pipeline
 extern idCVar r_skipSuppress;			// ignore the per-view suppressions
 extern idCVar r_skipInteractions;		// skip all light/surface interaction drawing
 extern idCVar r_skipFrontEnd;			// bypasses all front end work, but 2D gui rendering still draws
@@ -1376,6 +1381,7 @@ void RB_BindVariableStageImage( const textureStage_t *texture, const float *shad
 void RB_BindStageTexture( const float *shaderRegisters, const textureStage_t *texture, const drawSurf_t *surf );
 void RB_FinishStageTexture( const textureStage_t *texture, const drawSurf_t *surf );
 void RB_StencilShadowPass( const drawSurf_t *drawSurfs );
+void RB_STD_DrawGlowView( void );
 void RB_STD_DrawView( void );
 void RB_STD_FogAllLights( void );
 void RB_BakeTextureMatrixIntoTexgen( idPlane lightProject[3], const float textureMatrix[16] );
@@ -1392,6 +1398,9 @@ void	R_ARB2_Init( void );
 void	RB_ARB2_DrawInteractions( void );
 void	R_ReloadARBPrograms_f( const idCmdArgs &args );
 int		R_FindARBProgram( GLenum target, const char *program );
+bool	R_ARBProgramUsesInteractionInputs( GLenum target, const char *program );
+void	RB_ARB2_DrawShaderInteraction( const drawInteraction_t *din, const shaderStage_t *surfaceStage,
+			const float *surfaceRegs, const float lightColor[4] );
 
 typedef enum {
 	PROG_INVALID,

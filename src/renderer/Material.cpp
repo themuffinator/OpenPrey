@@ -134,6 +134,15 @@ void idMaterial::CommonInit() {
 // jmarshall end
 
 	decalInfo.stayTime = 10000;
+	decalInfo.fadeTime = 4000;
+	decalInfo.start[0] = 1.0f;
+	decalInfo.start[1] = 1.0f;
+	decalInfo.start[2] = 1.0f;
+	decalInfo.start[3] = 1.0f;
+	decalInfo.end[0] = 0.0f;
+	decalInfo.end[1] = 0.0f;
+	decalInfo.end[2] = 0.0f;
+	decalInfo.end[3] = 0.0f;
 	decalInfo.maxAngle = 0.1f;
 }
 
@@ -445,20 +454,24 @@ void idMaterial::ParseDecalInfo( idLexer &src ) {
 
 	// Quake 4 syntax: "decalInfo <staySeconds>, <maxAngle>".
 	if ( token == "," ) {
+		decalInfo.fadeTime = 0;
 		decalInfo.maxAngle = src.ParseFloat();
 		return;
 	}
 
-	// Legacy Doom 3 syntax compatibility:
+	// Retail Prey retains the Doom 3 decal syntax:
 	// "decalInfo <staySeconds> <fadeSeconds> ( <start rgba> ) ( <end rgba> )".
-	if ( token.type == TT_NUMBER || token == "." || token == "-" ) {
-		float dummy[4];
-		src.Parse1DMatrix( 4, dummy );
-		src.Parse1DMatrix( 4, dummy );
-		return;
-	}
-
 	src.UnreadToken( &token );
+	decalInfo.fadeTime = src.ParseFloat() * 1000;
+
+	float start[4], end[4];
+	src.Parse1DMatrix( 4, start );
+	src.Parse1DMatrix( 4, end );
+
+	for ( int i = 0; i < 4; i++ ) {
+		decalInfo.start[i] = start[i];
+		decalInfo.end[i] = end[i];
+	}
 }
 
 /*
@@ -976,6 +989,7 @@ void idMaterial::ParseBlend( idLexer &src, shaderStage_t *stage ) {
 	}
 	if ( !token.Icmp( "shader" ) ) {
 		// Prey programmable shader stages accumulate per-mask contributions.
+		// Light-dependent programs are classified after parsing the stage.
 		stage->drawStateBits = GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE;
 		return;
 	}
@@ -1916,12 +1930,14 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 			if ( src.ReadTokenOnLine( &token ) ) {
 				newStage.vertexProgram = R_FindARBProgram( GL_VERTEX_PROGRAM_ARB, token.c_str() );
 				newStage.fragmentProgram = R_FindARBProgram( GL_FRAGMENT_PROGRAM_ARB, token.c_str() );
+				newStage.interactionProgram |= R_ARBProgramUsesInteractionInputs( GL_FRAGMENT_PROGRAM_ARB, token.c_str() );
 			}
 			continue;
 		}
 		if ( !token.Icmp( "fragmentProgram" ) ) {
 			if ( src.ReadTokenOnLine( &token ) ) {
 				newStage.fragmentProgram = R_FindARBProgram( GL_FRAGMENT_PROGRAM_ARB, token.c_str() );
+				newStage.interactionProgram |= R_ARBProgramUsesInteractionInputs( GL_FRAGMENT_PROGRAM_ARB, token.c_str() );
 			}
 			continue;
 		}
@@ -2080,6 +2096,9 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 	if ( newStage.fragmentProgram || newStage.vertexProgram || newStage.glslProgram ) {
 		ss->newStage = (newShaderStage_t *)Mem_Alloc( sizeof( newStage ) );
 		*(ss->newStage) = newStage;
+		if ( ss->newStage->interactionProgram ) {
+			ss->lighting = SL_INTERACTION;
+		}
 	}
 
 	// successfully parsed a stage
@@ -2155,8 +2174,8 @@ void idMaterial::ParseDeform( idLexer &src ) {
 		return;
 	}
 	if ( !token.Icmp( "corona" ) ) {
-		// Prey corona deforms are authored as flare-like size-controlled quads.
-		deform = DFRM_FLARE;
+		// Retail Prey routes coronas through a dedicated billboard deform.
+		deform = DFRM_CORONA;
 		cullType = CT_TWO_SIDED;
 		if ( src.ReadTokenOnLine( &token ) ) {
 			src.UnreadToken( &token );
@@ -2469,6 +2488,11 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 			src.SkipRestOfLine();
 			sort = SS_SUBVIEW;
 			subviewClass = SC_PORTAL_SKYBOX;
+			coverage = MC_OPAQUE;
+			SetMaterialFlag( MF_NOSHADOWS );
+			idToken t;
+			t = "discrete";
+			CheckSurfaceParm( &t );
 			continue;
 		}
 		// jmarshall end
@@ -2781,9 +2805,10 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 			newSrc.FreeSource();
 			continue;
 		}
-		// DECAL_MACRO and legacy Prey overlay/scorch/decal macros.
+		// Retail Prey treats authored decal/scorch macros as translucent decal surfaces.
+		// Individual alphaTest stages can still promote the final coverage to MC_PERFORATED.
 		else if ( !token.Icmp( "DECAL_MACRO" ) || !token.Icmp( "decal_alphatest_macro" ) ||
-			!token.Icmp( "overlay_macro" ) || !token.Icmp( "scorch_macro" ) ) {
+			!token.Icmp( "scorch_macro" ) ) {
 			// polygonOffset
 			SetMaterialFlag( MF_POLYGONOFFSET );
 			polygonOffset = 1;
@@ -2797,6 +2822,11 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 
 			// noShadows
 			SetMaterialFlag( MF_NOSHADOWS );
+			coverage = MC_TRANSLUCENT;
+			continue;
+		}
+		// Legacy Prey authoring metadata that should not mutate decal coverage.
+		else if ( !token.Icmp( "overlay_macro" ) ) {
 			continue;
 		}
 		// Legacy Prey authoring macros/flags that should not default the material.

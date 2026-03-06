@@ -1,0 +1,24 @@
+// string table
+// english
+//
+
+{
+	"#str_04137"	"EAX support enabled."
+	"#str_100625"	"Dedicated server mode is recommended for Internet servers with more than %d players. Continue in listen mode?"
+	"#str_100626"	"Dedicated server mode recommended"
+	"#str_107660"	"Frag Limit"
+	"#str_107661"	"Capture Limit"
+	"#str_107676"	"Tournament"
+	"#str_107677"	"Team Deathmatch"
+	"#str_107678"	"Capture the Flag"
+	"#str_107679"	"Deathmatch"
+	"#str_107680"	"One Flag CTF"
+	"#str_107681"	"Arena CTF"
+	"#str_107682"	"Arena One Flag CTF"
+	"#str_110011"	"Deathmatch"
+	"#str_110012"	"Tournament"
+	"#str_110013"	"Team Deathmatch"
+	"#str_110014"	"Capture the Flag"
+	"#str_110015"	"Arena CTF"
+	"#str_122001"	"DeadZone"
+}

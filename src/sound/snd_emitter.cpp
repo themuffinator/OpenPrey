@@ -37,6 +37,8 @@ idCVar s_centerFractionVO( "s_centerFractionVO", "0.75", CVAR_FLOAT, "Portion of
 
 extern idCVar s_playDefaultSound;
 extern idCVar s_noSound;
+extern idCVar s_musicvolume_dB;
+extern idCVar s_volume_dB;
 
 static ID_INLINE float VolumeScaleToDB( const float volumeScale )
 {
@@ -327,9 +329,14 @@ void idSoundChannel::UpdateVolume( int currentTime )
 	newVolumeDB += volumeFade.GetVolume( currentTime );
 	newVolumeDB += soundWorld->volumeFade.GetVolume( currentTime );
 	newVolumeDB += soundWorld->pauseFade.GetVolume( currentTime );
+	newVolumeDB += s_volume_dB.GetFloat();
 	if( parms.soundClass >= 0 && parms.soundClass < SOUND_MAX_CLASSES )
 	{
 		newVolumeDB += soundWorld->soundClassFade[parms.soundClass].GetVolume( currentTime );
+	}
+	if( ( parms.soundShaderFlags & SSF_MUSIC ) != 0 )
+	{
+		newVolumeDB += s_musicvolume_dB.GetFloat();
 	}
 
 	bool global = ( parms.soundShaderFlags & SSF_GLOBAL ) != 0;

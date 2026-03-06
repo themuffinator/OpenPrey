@@ -213,7 +213,7 @@ idRenderModel *hhRenderModelBeam::InstantiateDynamicModel( const struct renderEn
 	current_view = view;
 	int id = 0;
 	for ( int i = 0; i < declBeam->numBeams; i++ ) {
-		UpdateSurface( renderEntity, i, renderEntity->beamNodes, const_cast<modelSurface_t *>( staticModel->Surface( i ) ) );
+		UpdateSurface( renderEntity, i, &renderEntity->beamNodes[i], const_cast<modelSurface_t *>( staticModel->Surface( i ) ) );
 		id++;
 	}
 
@@ -223,7 +223,7 @@ idRenderModel *hhRenderModelBeam::InstantiateDynamicModel( const struct renderEn
 				continue;
 			}
 
-			UpdateQuadSurface( renderEntity, i, m, renderEntity->beamNodes, const_cast<modelSurface_t *>( staticModel->Surface( id++ ) ) );
+			UpdateQuadSurface( renderEntity, i, m, &renderEntity->beamNodes[i], const_cast<modelSurface_t *>( staticModel->Surface( id++ ) ) );
 		}
 	}
 
@@ -244,13 +244,26 @@ idBounds hhRenderModelBeam::Bounds( const struct renderEntity_s *renderEntity ) 
 		b.ExpandSelf( 8.0f );
 	} else {
 		for ( int i = 0; i < declBeam->numBeams; i++ ) {
+			const hhBeamNodes_t &beam = renderEntity->beamNodes[i];
 			for ( int m = 0; m < declBeam->numNodes; m++ ) {
-				const idVec3 &target = renderEntity->beamNodes->nodes[m];
+				const idVec3 &target = beam.nodes[m];
 				idBounds tb;
 				tb.Zero();
 				tb.AddPoint( target );
 				tb.ExpandSelf( declBeam->thickness[i] * 0.5f );
 				b += tb;
+			}
+
+			for ( int m = 0; m < 2; m++ ) {
+				if ( !declBeam->quadShader[i][m] || declBeam->quadSize[i][m] <= 0.0f ) {
+					continue;
+				}
+
+				idBounds qb;
+				qb.Zero();
+				qb.AddPoint( m == 0 ? beam.nodes[0] : beam.nodes[declBeam->numNodes - 1] );
+				qb.ExpandSelf( declBeam->quadSize[i][m] * 0.5f );
+				b += qb;
 			}
 		}
 	}

@@ -111,6 +111,8 @@ static bool RB_UseAlphaToCoverage( const idMaterial *shader ) {
 	return colorImage->GetOpts().numMSAASamples > 1;
 }
 
+int RB_STD_DrawShaderPasses( drawSurf_t **drawSurfs, int numDrawSurfs );
+
 static void RB_FreeGLSLProgram( newShaderStage_t *stage ) {
 	if ( stage == NULL ) {
 		return;
@@ -414,7 +416,7 @@ static void RB_STD_Bloom( void ) {
 		return;
 	}
 
-	const bool bloomEnabled = r_bloom.GetBool() && !r_skipGlowOverlay.GetBool();
+	const bool bloomEnabled = r_bloom.GetBool();
 	const bool toneMapEnabled = r_hdrToneMap.GetBool();
 	const float hdrSaturation = r_hdrSaturation.GetFloat();
 	const float hdrContrast = r_hdrContrast.GetFloat();
@@ -560,6 +562,223 @@ static void RB_STD_Bloom( void ) {
 	glEnable( GL_STENCIL_TEST );
 	glMatrixMode( GL_MODELVIEW );
 	GL_Cull( CT_FRONT_SIDED );
+}
+
+static bool RB_GlowEnabledForCurrentView( void ) {
+	if ( backEnd.viewDef == NULL ) {
+		return false;
+	}
+
+	if ( backEnd.viewDef->isSubview || backEnd.viewDef->isEditor || backEnd.viewDef->isGlowView ) {
+		return false;
+	}
+
+	if ( !backEnd.viewDef->viewEntitys ) {
+		return false;
+	}
+
+	if ( r_skipGlowOverlay.GetBool() ) {
+		return false;
+	}
+
+	if ( r_glowStrength.GetFloat() <= 0.0f ) {
+		return false;
+	}
+
+	if ( globalImages->accumImage == NULL || globalImages->glowScreenImage == NULL || globalImages->glowCompositeImage == NULL ) {
+		return false;
+	}
+
+	return true;
+}
+
+static void RB_GlowSetScreenRect( void ) {
+	const int viewportWidth = backEnd.viewDef->viewport.x2 - backEnd.viewDef->viewport.x1 + 1;
+	const int viewportHeight = backEnd.viewDef->viewport.y2 - backEnd.viewDef->viewport.y1 + 1;
+
+	glViewport(
+		backEnd.viewDef->viewport.x1,
+		backEnd.viewDef->viewport.y1,
+		viewportWidth,
+		viewportHeight );
+
+	glScissor(
+		backEnd.viewDef->viewport.x1 + backEnd.viewDef->scissor.x1,
+		backEnd.viewDef->viewport.y1 + backEnd.viewDef->scissor.y1,
+		backEnd.viewDef->scissor.x2 - backEnd.viewDef->scissor.x1 + 1,
+		backEnd.viewDef->scissor.y2 - backEnd.viewDef->scissor.y1 + 1 );
+	backEnd.currentScissor = backEnd.viewDef->scissor;
+}
+
+static void RB_GlowBeginScreenPass( void ) {
+	RB_GlowSetScreenRect();
+
+	glMatrixMode( GL_MODELVIEW );
+	glLoadIdentity();
+	glMatrixMode( GL_PROJECTION );
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho( 0, 1, 0, 1, -4, 1 );
+
+	GL_Cull( CT_TWO_SIDED );
+	glDisableClientState( GL_COLOR_ARRAY );
+	glDisable( GL_DEPTH_TEST );
+	glDisable( GL_STENCIL_TEST );
+
+	GL_SelectTexture( 1 );
+	globalImages->BindNull();
+	GL_SelectTexture( 0 );
+	GL_TexEnv( GL_MODULATE );
+}
+
+static void RB_GlowEndScreenPass( void ) {
+	glMatrixMode( GL_PROJECTION );
+	glPopMatrix();
+	glEnable( GL_DEPTH_TEST );
+	glEnable( GL_STENCIL_TEST );
+	glMatrixMode( GL_MODELVIEW );
+	GL_Cull( CT_FRONT_SIDED );
+}
+
+static void RB_GlowDrawScreenQuad( float offsetX, float offsetY ) {
+	glBegin( GL_QUADS );
+	glTexCoord2f( 0.0f, 0.0f );
+	glVertex2f( offsetX, offsetY );
+	glTexCoord2f( 1.0f, 0.0f );
+	glVertex2f( 1.0f + offsetX, offsetY );
+	glTexCoord2f( 1.0f, 1.0f );
+	glVertex2f( 1.0f + offsetX, 1.0f + offsetY );
+	glTexCoord2f( 0.0f, 1.0f );
+	glVertex2f( offsetX, 1.0f + offsetY );
+	glEnd();
+}
+
+static void RB_GlowCopyViewToImage( idImage *image ) {
+	if ( image == NULL ) {
+		return;
+	}
+
+	const int viewportWidth = backEnd.viewDef->viewport.x2 - backEnd.viewDef->viewport.x1 + 1;
+	const int viewportHeight = backEnd.viewDef->viewport.y2 - backEnd.viewDef->viewport.y1 + 1;
+	if ( viewportWidth <= 0 || viewportHeight <= 0 ) {
+		return;
+	}
+
+	image->CopyFramebuffer(
+		backEnd.viewDef->viewport.x1,
+		backEnd.viewDef->viewport.y1,
+		viewportWidth,
+		viewportHeight );
+}
+
+static void RB_GlowDrawImage( idImage *image, int stateBits, float colorScale ) {
+	if ( image == NULL ) {
+		return;
+	}
+
+	GL_State( stateBits );
+	GL_SelectTexture( 0 );
+	image->Bind();
+	glColor4f( colorScale, colorScale, colorScale, colorScale );
+	RB_GlowDrawScreenQuad( 0.0f, 0.0f );
+}
+
+static void RB_GlowBlurPass( idImage *sourceImage, idImage *captureImage, bool horizontal ) {
+	if ( sourceImage == NULL || captureImage == NULL ) {
+		return;
+	}
+
+	const int steps = idMath::ClampInt( 0, 256, r_glowSteps.GetInteger() );
+	const float startAlpha = idMath::ClampFloat( 0.0f, 8.0f, r_glowAlpha.GetFloat() );
+	const float alphaChange = idMath::ClampFloat( 0.0f, 8.0f, r_glowAlphaChange.GetFloat() );
+	const float blurStep = 1.0f / static_cast<float>( Max( 1, sourceImage->GetUploadWidth() ) );
+
+	RB_GlowBeginScreenPass();
+
+	GL_SelectTexture( 0 );
+	sourceImage->Bind();
+
+	GL_State( GLS_DEPTHFUNC_ALWAYS | GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ZERO );
+	glColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
+	RB_GlowDrawScreenQuad( 0.0f, 0.0f );
+
+	if ( steps > 1 && startAlpha > 0.0f ) {
+		float alpha = startAlpha;
+		GL_State( GLS_DEPTHFUNC_ALWAYS | GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE );
+		for ( int step = 1; step < steps; ++step ) {
+			if ( alpha <= 0.001f ) {
+				break;
+			}
+
+			const float offset = blurStep * static_cast<float>( step );
+			const float offsetX = horizontal ? offset : 0.0f;
+			const float offsetY = horizontal ? 0.0f : offset;
+			glColor4f( 1.0f, 1.0f, 1.0f, alpha );
+			RB_GlowDrawScreenQuad( offsetX, offsetY );
+			RB_GlowDrawScreenQuad( -offsetX, -offsetY );
+			alpha *= alphaChange;
+		}
+	}
+
+	glColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
+	RB_GlowCopyViewToImage( captureImage );
+	RB_GlowEndScreenPass();
+}
+
+void RB_STD_DrawGlowView( void ) {
+	drawSurf_t **drawSurfs = (drawSurf_t **)&backEnd.viewDef->drawSurfs[0];
+	const int numDrawSurfs = backEnd.viewDef->numDrawSurfs;
+	if ( drawSurfs == NULL || numDrawSurfs <= 0 ) {
+		return;
+	}
+
+	RB_LogComment( "---------- RB_STD_DrawGlowView ----------\n" );
+	backEnd.depthFunc = GLS_DEPTHFUNC_EQUAL;
+
+	RB_BeginDrawingView();
+	glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
+	glClear( GL_COLOR_BUFFER_BIT );
+
+	RB_STD_FillDepthBuffer( drawSurfs, numDrawSurfs );
+	glStencilFunc( GL_ALWAYS, 128, 255 );
+	RB_STD_DrawShaderPasses( drawSurfs, numDrawSurfs );
+}
+
+static void RB_STD_GlowOverlay( drawSurf_t **drawSurfs, int numDrawSurfs ) {
+	if ( !RB_GlowEnabledForCurrentView() ) {
+		return;
+	}
+
+	const int viewportWidth = backEnd.viewDef->viewport.x2 - backEnd.viewDef->viewport.x1 + 1;
+	const int viewportHeight = backEnd.viewDef->viewport.y2 - backEnd.viewDef->viewport.y1 + 1;
+	if ( viewportWidth <= 0 || viewportHeight <= 0 ) {
+		return;
+	}
+
+	RB_LogComment( "---------- RB_DrawGlowOverlay ----------\n" );
+
+	RB_GlowCopyViewToImage( globalImages->accumImage );
+
+	viewDef_t glowView = *backEnd.viewDef;
+	glowView.isGlowView = true;
+
+	const viewDef_t *savedView = backEnd.viewDef;
+	const int savedDepthFunc = backEnd.depthFunc;
+	backEnd.viewDef = &glowView;
+	RB_STD_DrawGlowView();
+	backEnd.viewDef = savedView;
+	backEnd.depthFunc = savedDepthFunc;
+
+	RB_GlowCopyViewToImage( globalImages->glowScreenImage );
+
+	RB_GlowBlurPass( globalImages->glowScreenImage, globalImages->glowCompositeImage, true );
+	RB_GlowBlurPass( globalImages->glowCompositeImage, globalImages->glowCompositeImage, false );
+
+	RB_GlowBeginScreenPass();
+	RB_GlowDrawImage( globalImages->accumImage, GLS_DEPTHFUNC_ALWAYS | GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO, 1.0f );
+	RB_GlowDrawImage( globalImages->glowCompositeImage, GLS_DEPTHFUNC_ALWAYS | GLS_SRCBLEND_ONE | GLS_DSTBLEND_ONE, r_glowStrength.GetFloat() );
+	glColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
+	RB_GlowEndScreenPass();
 }
 
 /*
@@ -1320,8 +1539,8 @@ void RB_STD_T_RenderShaderPasses( const drawSurf_t *surf ) {
 			continue;
 		}
 
-		// Retail Prey "Use Glow" toggle maps to r_skipGlowOverlay.
-		if ( pStage->glowStage && r_skipGlowOverlay.GetBool() ) {
+		// The retail glow pass renders only stages explicitly authored for glow.
+		if ( backEnd.viewDef->isGlowView && !pStage->glowStage ) {
 			continue;
 		}
 
@@ -1331,7 +1550,7 @@ void RB_STD_T_RenderShaderPasses( const drawSurf_t *surf ) {
 		}
 
 		// Fallback for materials that reference _currentRender but were not sorted as post-process.
-		if ( !backEnd.currentRenderCopied && RB_StageUsesCurrentRender( pStage ) ) {
+		if ( !backEnd.viewDef->isGlowView && !backEnd.currentRenderCopied && RB_StageUsesCurrentRender( pStage ) ) {
 			globalImages->currentRenderImage->CopyFramebuffer( backEnd.viewDef->viewport.x1,
 				backEnd.viewDef->viewport.y1, backEnd.viewDef->viewport.x2 - backEnd.viewDef->viewport.x1 + 1,
 				backEnd.viewDef->viewport.y2 - backEnd.viewDef->viewport.y1 + 1 );
@@ -2382,6 +2601,7 @@ void	RB_STD_DrawView( void ) {
 	}
 
 	RB_RenderDebugTools( drawSurfs, numDrawSurfs );
+	RB_STD_GlowOverlay( drawSurfs, numDrawSurfs );
 
 // jmarshall - stupid OpenGL
 	GL_State(GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO);

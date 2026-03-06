@@ -473,6 +473,7 @@ typedef struct {
 	GLenum			target;
 	GLuint			ident;
 	char			name[64];
+	bool			interactionProgram;
 } progDef_t;
 
 static	const int	MAX_GLPROGS = 200;
@@ -498,6 +499,41 @@ static progDef_t	progs[MAX_GLPROGS] = {
 
 	// additional programs can be dynamically specified in materials
 };
+
+static progDef_t *R_FindARBProgramDefByName( GLenum target, const char *program ) {
+	idStr stripped = program;
+	stripped.StripFileExtension();
+
+	for ( int i = 0; progs[i].name[0]; i++ ) {
+		if ( progs[i].target != target ) {
+			continue;
+		}
+
+		idStr compare = progs[i].name;
+		compare.StripFileExtension();
+		if ( !idStr::Icmp( stripped.c_str(), compare.c_str() ) ) {
+			return &progs[i];
+		}
+	}
+
+	return NULL;
+}
+
+static bool R_ARBProgramSourceUsesInteractionInputs( GLenum target, const char *source ) {
+	if ( target != GL_FRAGMENT_PROGRAM_ARB || !source ) {
+		return false;
+	}
+
+	idStr normalizedProgram;
+	RB_StripARBProgramCommentsAndWhitespace( source, normalizedProgram );
+	const char *normalized = normalizedProgram.c_str();
+
+	// Interaction programs are identified by sampling the light falloff and
+	// light projection textures. Tangent-space warp programs like distort.vfp
+	// also use fragment.texcoord[2]/[3], so varyings are not a reliable signal.
+	return strstr( normalized, "texture[2]" ) != NULL
+		&& strstr( normalized, "texture[3]" ) != NULL;
+}
 
 /*
 =================
@@ -528,33 +564,13 @@ void R_LoadARBProgram( int progIndex ) {
 	strcpy( buffer, fileBuffer );
 	fileSystem->FreeFile( fileBuffer );
 
-	if ( !glConfig.isInitialized ) {
-		return;
-	}
-
-	//
-	// submit the program string at start to GL
-	//
-	if ( progs[progIndex].ident == 0 ) {
-		// allocate a new identifier for this program
-		progs[progIndex].ident = PROG_USER + progIndex;
-	}
-
 	// vertex and fragment programs can both be present in a single file, so
 	// scan for the proper header to be the start point, and stamp a 0 in after the end
 
 	if ( progs[progIndex].target == GL_VERTEX_PROGRAM_ARB ) {
-		if ( !glConfig.ARBVertexProgramAvailable ) {
-			common->Printf( ": GL_VERTEX_PROGRAM_ARB not available\n" );
-			return;
-		}
 		start = strstr( (char *)buffer, "!!ARBvp" );
 	}
 	if ( progs[progIndex].target == GL_FRAGMENT_PROGRAM_ARB ) {
-		if ( !glConfig.ARBFragmentProgramAvailable ) {
-			common->Printf( ": GL_FRAGMENT_PROGRAM_ARB not available\n" );
-			return;
-		}
 		start = strstr( (char *)buffer, "!!ARBfp" );
 	}
 	if ( !start ) {
@@ -568,6 +584,28 @@ void R_LoadARBProgram( int progIndex ) {
 		return;
 	}
 	end[3] = 0;
+	progs[progIndex].interactionProgram = R_ARBProgramSourceUsesInteractionInputs( progs[progIndex].target, start );
+
+	if ( !glConfig.isInitialized ) {
+		return;
+	}
+
+	if ( progs[progIndex].target == GL_VERTEX_PROGRAM_ARB && !glConfig.ARBVertexProgramAvailable ) {
+		common->Printf( ": GL_VERTEX_PROGRAM_ARB not available\n" );
+		return;
+	}
+	if ( progs[progIndex].target == GL_FRAGMENT_PROGRAM_ARB && !glConfig.ARBFragmentProgramAvailable ) {
+		common->Printf( ": GL_FRAGMENT_PROGRAM_ARB not available\n" );
+		return;
+	}
+
+	//
+	// submit the program string at start to GL
+	//
+	if ( progs[progIndex].ident == 0 ) {
+		// allocate a new identifier for this program
+		progs[progIndex].ident = PROG_USER + progIndex;
+	}
 
 	if ( progs[progIndex].ident == VPROG_INTERACTION ) {
 		interactionColorMode_t detectedMode = ICM_PACKED;
@@ -606,6 +644,17 @@ void R_LoadARBProgram( int progIndex ) {
 	}
 
 	common->Printf( "\n" );
+}
+
+bool R_ARBProgramUsesInteractionInputs( GLenum target, const char *program ) {
+	progDef_t *prog = R_FindARBProgramDefByName( target, program );
+	if ( prog ) {
+		return prog->interactionProgram;
+	}
+
+	R_FindARBProgram( target, program );
+	prog = R_FindARBProgramDefByName( target, program );
+	return prog && prog->interactionProgram;
 }
 
 /*
@@ -648,6 +697,170 @@ int R_FindARBProgram( GLenum target, const char *program ) {
 	R_LoadARBProgram( i );
 
 	return progs[i].ident;
+}
+
+static void RB_ARB2_SetInteractionVertexColorMode( stageVertexColor_t vertexColor ) {
+	static const float zero[4] = { 0, 0, 0, 0 };
+	float modulate = 0.0f;
+	float add = 1.0f;
+
+	switch ( vertexColor ) {
+	case SVC_IGNORE:
+		modulate = 0.0f;
+		add = 1.0f;
+		break;
+	case SVC_MODULATE:
+		modulate = 1.0f;
+		add = 0.0f;
+		break;
+	case SVC_INVERSE_MODULATE:
+		modulate = -1.0f;
+		add = 1.0f;
+		break;
+	}
+
+	if ( g_interactionVertexProgramColorMode == ICM_PACKED ) {
+		const float packed[4] = { modulate, add, 0.0f, 0.0f };
+		glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_COLOR_MODULATE, packed );
+		glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_COLOR_ADD, zero );
+	} else {
+		float modulateVec[4] = { modulate, modulate, modulate, modulate };
+		float addVec[4] = { add, add, add, add };
+		glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_COLOR_MODULATE, modulateVec );
+		glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_COLOR_ADD, addVec );
+	}
+}
+
+static void RB_ARB2_SetInteractionProgramEnv( const drawInteraction_t *din, stageVertexColor_t vertexColor ) {
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_LIGHT_ORIGIN, din->localLightOrigin.ToFloatPtr() );
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_VIEW_ORIGIN, din->localViewOrigin.ToFloatPtr() );
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_LIGHT_PROJECT_S, din->lightProjection[0].ToFloatPtr() );
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_LIGHT_PROJECT_T, din->lightProjection[1].ToFloatPtr() );
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_LIGHT_PROJECT_Q, din->lightProjection[2].ToFloatPtr() );
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_LIGHT_FALLOFF_S, din->lightProjection[3].ToFloatPtr() );
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_BUMP_MATRIX_S, din->bumpMatrix[0].ToFloatPtr() );
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_BUMP_MATRIX_T, din->bumpMatrix[1].ToFloatPtr() );
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_DIFFUSE_MATRIX_S, din->diffuseMatrix[0].ToFloatPtr() );
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_DIFFUSE_MATRIX_T, din->diffuseMatrix[1].ToFloatPtr() );
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_SPECULAR_MATRIX_S, din->specularMatrix[0].ToFloatPtr() );
+	glProgramEnvParameter4fvARB( GL_VERTEX_PROGRAM_ARB, PP_SPECULAR_MATRIX_T, din->specularMatrix[1].ToFloatPtr() );
+	RB_ARB2_SetInteractionVertexColorMode( vertexColor );
+}
+
+static void RB_ARB2_RestoreInteractionPrograms() {
+	if ( r_testARBProgram.GetBool() ) {
+		glBindProgramARB( GL_VERTEX_PROGRAM_ARB, VPROG_TEST );
+		glBindProgramARB( GL_FRAGMENT_PROGRAM_ARB, FPROG_TEST );
+	} else {
+		glBindProgramARB( GL_VERTEX_PROGRAM_ARB, VPROG_INTERACTION );
+		glBindProgramARB( GL_FRAGMENT_PROGRAM_ARB, FPROG_INTERACTION );
+	}
+}
+
+void RB_ARB2_DrawShaderInteraction( const drawInteraction_t *din, const shaderStage_t *surfaceStage,
+		const float *surfaceRegs, const float lightColor[4] ) {
+	const newShaderStage_t *newStage = surfaceStage->newStage;
+	if ( !newStage || !newStage->fragmentProgram ) {
+		return;
+	}
+
+	float stageColor[4];
+	for ( int i = 0; i < 4; i++ ) {
+		stageColor[i] = surfaceRegs[ surfaceStage->color.registers[i] ];
+		if ( stageColor[i] < 0.0f ) {
+			stageColor[i] = 0.0f;
+		} else if ( stageColor[i] > 1.0f ) {
+			stageColor[i] = 1.0f;
+		}
+	}
+
+	float interactionColor[4] = {
+		stageColor[0] * lightColor[0],
+		stageColor[1] * lightColor[1],
+		stageColor[2] * lightColor[2],
+		stageColor[3] * lightColor[3]
+	};
+
+	GL_State( surfaceStage->drawStateBits | GLS_DEPTHMASK | backEnd.depthFunc );
+
+	glBindProgramARB( GL_VERTEX_PROGRAM_ARB, newStage->vertexProgram ? newStage->vertexProgram : VPROG_INTERACTION );
+	glBindProgramARB( GL_FRAGMENT_PROGRAM_ARB, newStage->fragmentProgram );
+
+	RB_ARB2_SetInteractionProgramEnv( din, surfaceStage->vertexColor );
+	glProgramEnvParameter4fvARB( GL_FRAGMENT_PROGRAM_ARB, 0, interactionColor );
+	glProgramEnvParameter4fvARB( GL_FRAGMENT_PROGRAM_ARB, 1, interactionColor );
+
+	for ( int i = 0; i < newStage->numVertexParms; i++ ) {
+		float parm[4];
+		parm[0] = surfaceRegs[ newStage->vertexParms[i][0] ];
+		parm[1] = surfaceRegs[ newStage->vertexParms[i][1] ];
+		parm[2] = surfaceRegs[ newStage->vertexParms[i][2] ];
+		parm[3] = surfaceRegs[ newStage->vertexParms[i][3] ];
+		glProgramLocalParameter4fvARB( GL_VERTEX_PROGRAM_ARB, i, parm );
+	}
+
+	for ( int i = 0; i < newStage->numFragmentParms; i++ ) {
+		float parm[4];
+		parm[0] = surfaceRegs[ newStage->fragmentParms[i][0] ];
+		parm[1] = surfaceRegs[ newStage->fragmentParms[i][1] ];
+		parm[2] = surfaceRegs[ newStage->fragmentParms[i][2] ];
+		parm[3] = surfaceRegs[ newStage->fragmentParms[i][3] ];
+		glProgramLocalParameter4fvARB( GL_FRAGMENT_PROGRAM_ARB, i, parm );
+	}
+
+	GL_SelectTextureNoClient( 0 );
+	if ( din->ambientLight ) {
+		globalImages->ambientNormalMap->Bind();
+	} else {
+		globalImages->normalCubeMapImage->Bind();
+	}
+
+	GL_SelectTextureNoClient( 1 );
+	if ( newStage->numFragmentProgramImages > 1 && newStage->fragmentProgramImages[1] ) {
+		newStage->fragmentProgramImages[1]->Bind();
+	} else {
+		globalImages->flatNormalMap->Bind();
+	}
+
+	GL_SelectTextureNoClient( 2 );
+	din->lightFalloffImage->Bind();
+
+	GL_SelectTextureNoClient( 3 );
+	din->lightImage->Bind();
+
+	GL_SelectTextureNoClient( 4 );
+	globalImages->blackImage->Bind();
+
+	GL_SelectTextureNoClient( 5 );
+	globalImages->blackImage->Bind();
+
+	GL_SelectTextureNoClient( 6 );
+	globalImages->specularTableImage->Bind();
+
+	GL_SelectTextureNoClient( 7 );
+	globalImages->blackImage->Bind();
+
+	for ( int i = 4; i < newStage->numFragmentProgramImages; i++ ) {
+		if ( newStage->fragmentProgramImages[i] ) {
+			GL_SelectTextureNoClient( i );
+			newStage->fragmentProgramImages[i]->Bind();
+		}
+	}
+
+	RB_DrawElementsWithCounters( din->surf->geo );
+
+	GL_SelectTextureNoClient( 7 );
+	globalImages->BindNull();
+	GL_SelectTextureNoClient( 6 );
+	globalImages->specularTableImage->Bind();
+	GL_SelectTextureNoClient( 0 );
+	if ( din->ambientLight ) {
+		globalImages->ambientNormalMap->Bind();
+	} else {
+		globalImages->normalCubeMapImage->Bind();
+	}
+
+	RB_ARB2_RestoreInteractionPrograms();
 }
 
 /*

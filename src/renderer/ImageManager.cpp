@@ -66,6 +66,7 @@ static void OpenPrey_RemapLegacyImageName( idStr& name ) {
 		{ "gfx/guis/white", "guis/assets/white" },
 		{ "gfx/guis/guicursor_arrow", "guis/assets/guicursor_arrow" },
 		{ "gfx/guis/guicursor_hand", "guis/assets/guicursor_hand" },
+		{ "gfx/guis/guicursor_menu", "guis/assets/guicursor_menu" },
 		{ "gfx/guis/scrollbarh", "guis/assets/scrollbarv" },
 		{ "gfx/guis/scrollbarv", "guis/assets/scrollbarv" },
 		{ "gfx/guis/scrollbar_thumb", "guis/assets/scrollbar_thumb" },

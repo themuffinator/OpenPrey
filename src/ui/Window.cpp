@@ -210,7 +210,7 @@ struct tabSeparatorStyle_t {
 	float top;
 	float right;
 	float bottom;
-	float margin;
+	bool useFullRect;
 };
 
 static idWinVar *GetWindowVarForTabLayout( const idWindow *window, const char *name ) {
@@ -233,6 +233,73 @@ static bool ParseFloatQuadValue( const char *value, float &a, float &b, float &c
 
 	return ( sscanf( value, "%f , %f , %f , %f", &a, &b, &c, &d ) == 4 ) ||
 		   ( sscanf( value, "%f %f %f %f", &a, &b, &c, &d ) == 4 );
+}
+
+static idRectangle GetWindowMarginsInsetRect( const idWindow *window, const idRectangle &rect ) {
+	idRectangle inset = rect;
+	if ( window == NULL ) {
+		return inset;
+	}
+
+	idWinVar *marginsVar = GetWindowVarForTabLayout( window, "margins" );
+	if ( marginsVar == NULL ) {
+		return inset;
+	}
+
+	float marginLeft = 0.0f;
+	float marginRight = 0.0f;
+	float marginTop = 0.0f;
+	float marginBottom = 0.0f;
+	if ( !ParseFloatQuadValue( marginsVar->c_str(), marginLeft, marginRight, marginTop, marginBottom ) ) {
+		return inset;
+	}
+
+	inset.x += marginLeft;
+	inset.y += marginTop;
+	inset.w -= ( marginLeft + marginRight );
+	inset.h -= ( marginTop + marginBottom );
+	return inset;
+}
+
+static void DrawRetailSuperWindowFrame( idDeviceContext *dc, const idRectangle &drawRect, const idMaterial *cornerMat, const idMaterial *sideMat, const idMaterial *topMat, float cornerWidth, float cornerHeight, float edgeSizeX, float edgeSizeY ) {
+	if ( dc == NULL ) {
+		return;
+	}
+
+	cornerWidth = idMath::Fabs( cornerWidth );
+	cornerHeight = idMath::Fabs( cornerHeight );
+	edgeSizeX = idMath::Fabs( edgeSizeX );
+	edgeSizeY = idMath::Fabs( edgeSizeY );
+	const idVec4 &frameColor = idDeviceContext::colorWhite;
+
+	const bool drawTopSegments = ( drawRect.h > cornerHeight );
+
+	if ( cornerMat != NULL && cornerWidth > 0.0f && cornerHeight > 0.0f ) {
+		if ( drawTopSegments ) {
+			dc->DrawMaterial( drawRect.x, drawRect.y, cornerWidth, cornerHeight, cornerMat, frameColor );
+			dc->DrawMaterial( drawRect.x + drawRect.w - cornerWidth, drawRect.y, -cornerWidth, cornerHeight, cornerMat, frameColor );
+		}
+
+		dc->DrawMaterial( drawRect.x, drawRect.y + drawRect.h - cornerHeight, cornerWidth, -cornerHeight, cornerMat, frameColor );
+		dc->DrawMaterial( drawRect.x + drawRect.w - cornerWidth, drawRect.y + drawRect.h - cornerHeight, -cornerWidth, -cornerHeight, cornerMat, frameColor );
+	}
+
+	const float horizontalX = drawRect.x + cornerWidth;
+	const float horizontalW = drawRect.w - cornerWidth - cornerWidth;
+	if ( topMat != NULL && edgeSizeY > 0.0f && horizontalW > 0.0f ) {
+		if ( drawTopSegments ) {
+			dc->DrawMaterial( horizontalX, drawRect.y, horizontalW, edgeSizeY, topMat, frameColor );
+		}
+
+		dc->DrawMaterial( horizontalX, drawRect.y + drawRect.h - edgeSizeY, horizontalW, -edgeSizeY, topMat, frameColor );
+	}
+
+	const float verticalY = drawRect.y + cornerHeight;
+	const float verticalH = drawRect.h - cornerHeight - cornerHeight;
+	if ( sideMat != NULL && edgeSizeX > 0.0f && verticalH > 0.0f ) {
+		dc->DrawMaterial( drawRect.x, verticalY, edgeSizeX, verticalH, sideMat, frameColor );
+		dc->DrawMaterial( drawRect.x + drawRect.w - edgeSizeX, verticalY, -edgeSizeX, verticalH, sideMat, frameColor );
+	}
 }
 
 static bool ParseVec4Value( const char *value, idVec4 &outColor ) {
@@ -355,6 +422,28 @@ static idRectangle GetTabButtonRect( const idRectangle &containerRect, const tab
 	return idRectangle( layout.spanStart + layout.spanPerTab * tabIndex, containerRect.y, layout.spanPerTab, layout.tabThickness );
 }
 
+static bool TabButtonRectContainsCursor( const idRectangle &tabRect, bool verticalTabs, bool isLastTab, float x, float y ) {
+	if ( x < tabRect.x || y < tabRect.y ) {
+		return false;
+	}
+
+	if ( verticalTabs ) {
+		return ( x <= tabRect.Right() ) && ( isLastTab ? ( y <= tabRect.Bottom() ) : ( y < tabRect.Bottom() ) );
+	}
+
+	return ( y <= tabRect.Bottom() ) && ( isLastTab ? ( x <= tabRect.Right() ) : ( x < tabRect.Right() ) );
+}
+
+static bool IsWindowDescendantOf( idWindow *window, idWindow *ancestor ) {
+	for ( idWindow *current = window; current != NULL; current = current->GetParent() ) {
+		if ( current == ancestor ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static const idMaterial *FindWindowMaterial( const idWindow *window, const char *materialVarName ) {
 	idWinVar *materialVar = GetWindowVarForTabLayout( window, materialVarName );
 	if ( materialVar == NULL ) {
@@ -382,7 +471,8 @@ static void DrawTabButtonSegments( idDeviceContext *dc, const idRectangle &tabRe
 
 	if ( verticalTabs ) {
 		const float topEdge = ( startMat != NULL ) ? idMath::ClampFloat( 0.0f, tabRect.h, edgeSize ) : 0.0f;
-		const float bottomEdge = ( endMat != NULL ) ? idMath::ClampFloat( 0.0f, tabRect.h - topEdge, edgeSize ) : 0.0f;
+		const bool mirrorStartToEnd = ( endMat == NULL && startMat != NULL );
+		const float bottomEdge = ( endMat != NULL || mirrorStartToEnd ) ? idMath::ClampFloat( 0.0f, tabRect.h - topEdge, edgeSize ) : 0.0f;
 		const float middleHeight = tabRect.h - topEdge - bottomEdge;
 
 		if ( startMat != NULL && topEdge > 0.0f ) {
@@ -397,14 +487,19 @@ static void DrawTabButtonSegments( idDeviceContext *dc, const idRectangle &tabRe
 			}
 		}
 
-		if ( endMat != NULL && bottomEdge > 0.0f ) {
-			dc->DrawMaterial( tabRect.x, tabRect.y + tabRect.h - bottomEdge, tabRect.w, bottomEdge, endMat, materialColor );
+		if ( bottomEdge > 0.0f ) {
+			if ( endMat != NULL ) {
+				dc->DrawMaterial( tabRect.x, tabRect.y + tabRect.h - bottomEdge, tabRect.w, bottomEdge, endMat, materialColor );
+			} else if ( mirrorStartToEnd ) {
+				dc->DrawMaterial( tabRect.x, tabRect.y + tabRect.h - bottomEdge, tabRect.w, -bottomEdge, startMat, materialColor );
+			}
 		}
 		return;
 	}
 
 	const float leftEdge = ( startMat != NULL ) ? idMath::ClampFloat( 0.0f, tabRect.w, edgeSize ) : 0.0f;
-	const float rightEdge = ( endMat != NULL ) ? idMath::ClampFloat( 0.0f, tabRect.w - leftEdge, edgeSize ) : 0.0f;
+	const bool mirrorStartToEnd = ( endMat == NULL && startMat != NULL );
+	const float rightEdge = ( endMat != NULL || mirrorStartToEnd ) ? idMath::ClampFloat( 0.0f, tabRect.w - leftEdge, edgeSize ) : 0.0f;
 	const float middleWidth = tabRect.w - leftEdge - rightEdge;
 
 	if ( startMat != NULL && leftEdge > 0.0f ) {
@@ -419,8 +514,12 @@ static void DrawTabButtonSegments( idDeviceContext *dc, const idRectangle &tabRe
 		}
 	}
 
-	if ( endMat != NULL && rightEdge > 0.0f ) {
-		dc->DrawMaterial( tabRect.x + tabRect.w - rightEdge, tabRect.y, rightEdge, tabRect.h, endMat, materialColor );
+	if ( rightEdge > 0.0f ) {
+		if ( endMat != NULL ) {
+			dc->DrawMaterial( tabRect.x + tabRect.w - rightEdge, tabRect.y, rightEdge, tabRect.h, endMat, materialColor );
+		} else if ( mirrorStartToEnd ) {
+			dc->DrawMaterial( tabRect.x + tabRect.w - rightEdge, tabRect.y, -rightEdge, tabRect.h, startMat, materialColor );
+		}
 	}
 }
 
@@ -429,7 +528,7 @@ static void GetTabSeparatorStyle( const idWindow *tab, tabSeparatorStyle_t &styl
 	style.top = 1.0f;
 	style.right = 1.0f;
 	style.bottom = 1.0f;
-	style.margin = 0.0f;
+	style.useFullRect = false;
 
 	idVec4 parsedLines;
 	idWinVar *separatorLinesVar = GetWindowVarForTabLayout( tab, "seperatorlines" );
@@ -443,14 +542,30 @@ static void GetTabSeparatorStyle( const idWindow *tab, tabSeparatorStyle_t &styl
 		style.bottom = parsedLines.w;
 	}
 
-	float parsedMargin = 0.0f;
 	idWinVar *separatorMarginVar = GetWindowVarForTabLayout( tab, "seperatormargin" );
 	if ( separatorMarginVar == NULL ) {
 		separatorMarginVar = GetWindowVarForTabLayout( tab, "separatormargin" );
 	}
-	if ( separatorMarginVar != NULL && ParseSingleFloatValue( separatorMarginVar->c_str(), parsedMargin ) ) {
-		style.margin = parsedMargin;
+	bool parsedUseFullRect = false;
+	if ( separatorMarginVar != NULL && ParseBoolValue( separatorMarginVar->c_str(), parsedUseFullRect ) ) {
+		style.useFullRect = parsedUseFullRect;
 	}
+}
+
+static void GetTabContainerMargins( const idWindow *window, float &marginStart, float &marginEnd ) {
+	marginStart = 0.0f;
+	marginEnd = 0.0f;
+
+	if ( window == NULL ) {
+		return;
+	}
+
+	idWinVar *tabMarginsVar = GetWindowVarForTabLayout( window, "tabmargins" );
+	if ( tabMarginsVar == NULL ) {
+		return;
+	}
+
+	ParseFloatPairValue( tabMarginsVar->c_str(), marginStart, marginEnd );
 }
 
 static void DrawBorderLineWithCutouts( idDeviceContext *dc, const idRectangle &lineRect, bool horizontal, const idVec4 &separatorColor, const idList<idRectangle> *cutouts ) {
@@ -574,33 +689,19 @@ static void DrawBorderLineWithCutouts( idDeviceContext *dc, const idRectangle &l
 	}
 }
 
-static void DrawTabSeparatorLines( idDeviceContext *dc, const idRectangle &tabRect, const tabSeparatorStyle_t &style, const idVec4 &separatorColor, bool verticalTabs, const idList<idRectangle> *cutouts = NULL ) {
+static void DrawTabSeparatorLines( idDeviceContext *dc, const idRectangle &tabRect, const tabSeparatorStyle_t &style, const idVec4 &separatorColor, const idList<idRectangle> *cutouts = NULL ) {
 	if ( dc == NULL ) {
 		return;
 	}
 
-	const float margin = idMath::ClampFloat( 0.0f, verticalTabs ? tabRect.h : tabRect.w, style.margin );
-
-	float leftY = tabRect.y;
-	float leftH = tabRect.h;
-	if ( verticalTabs ) {
-		leftY += margin;
-		leftH -= margin;
-	}
-	if ( style.left > 0.0f && leftH > 0.0f ) {
+	if ( style.left > 0.0f && tabRect.h > 0.0f ) {
 		const float lineW = idMath::ClampFloat( 0.0f, tabRect.w, style.left );
-		DrawBorderLineWithCutouts( dc, idRectangle( tabRect.x, leftY, lineW, leftH ), false, separatorColor, cutouts );
+		DrawBorderLineWithCutouts( dc, idRectangle( tabRect.x, tabRect.y, lineW, tabRect.h ), false, separatorColor, cutouts );
 	}
 
-	float topX = tabRect.x;
-	float topW = tabRect.w;
-	if ( !verticalTabs ) {
-		topX += margin;
-		topW -= margin;
-	}
-	if ( style.top > 0.0f && topW > 0.0f ) {
+	if ( style.top > 0.0f && tabRect.w > 0.0f ) {
 		const float lineH = idMath::ClampFloat( 0.0f, tabRect.h, style.top );
-		DrawBorderLineWithCutouts( dc, idRectangle( topX, tabRect.y, topW, lineH ), true, separatorColor, cutouts );
+		DrawBorderLineWithCutouts( dc, idRectangle( tabRect.x, tabRect.y, tabRect.w, lineH ), true, separatorColor, cutouts );
 	}
 
 	if ( style.right > 0.0f && tabRect.h > 0.0f ) {
@@ -1340,7 +1441,7 @@ const char *idWindow::HandleEvent(const sysEvent_t *event, bool *updateVisuals) 
 		}
 		RunTimeEvents(gui->GetTime());
 		CalcRects(0,0);
-		dc->SetCursor( idDeviceContext::CURSOR_ARROW );
+		dc->SetCursor( idDeviceContext::CURSOR_MENU );
 	}
 
 	if (visible && !noEvents) {
@@ -1793,24 +1894,27 @@ idWindow::DrawBackground
 ================
 */
 void idWindow::DrawBackground(const idRectangle &drawRect) {
-	if ( backColor.w() ) {
-		dc->DrawFilledRect(drawRect.x, drawRect.y, drawRect.w, drawRect.h, backColor);
+	const bool hasFrameDecoration = ( GetWinVarByName( "cornermat", false ) != NULL ) || ( GetWinVarByName( "topmat", false ) != NULL );
+	const bool usesRetailSuperWindowFrame = hasFrameDecoration && ( windowDefType.Icmp( "superWindowDef" ) == 0 );
+	const idRectangle backgroundRect = usesRetailSuperWindowFrame ? GetWindowMarginsInsetRect( this, drawRect ) : drawRect;
+
+	if ( backColor.w() && backgroundRect.w > 0.0f && backgroundRect.h > 0.0f ) {
+		dc->DrawFilledRect( backgroundRect.x, backgroundRect.y, backgroundRect.w, backgroundRect.h, backColor );
 	}
 
-	if ( background && matColor.w() ) {
+	if ( background && matColor.w() && backgroundRect.w > 0.0f && backgroundRect.h > 0.0f ) {
 		float scalex, scaley;
 		if ( flags & WIN_NATURALMAT ) {
-			scalex = drawRect.w / background->GetImageWidth();
-			scaley = drawRect.h / background->GetImageHeight();
+			scalex = backgroundRect.w / background->GetImageWidth();
+			scaley = backgroundRect.h / background->GetImageHeight();
 		} else {
 			scalex = matScalex;
 			scaley = matScaley;
 		}
-		dc->DrawMaterial(drawRect.x, drawRect.y, drawRect.w, drawRect.h, background, matColor, scalex, scaley);
+		dc->DrawMaterial( backgroundRect.x, backgroundRect.y, backgroundRect.w, backgroundRect.h, background, matColor, scalex, scaley );
 	}
 
 	const bool isHovered = ( parent != NULL && parent->overChild == this && !noEvents );
-	const bool hasFrameDecoration = ( GetWinVarByName( "cornermat", false ) != NULL ) || ( GetWinVarByName( "topmat", false ) != NULL );
 	if ( hasFrameDecoration ) {
 		return;
 	}
@@ -1876,9 +1980,6 @@ void idWindow::DrawBorderAndCaption(const idRectangle &drawRect) {
 		const idMaterial *bottomMat = FindWindowMaterial( this, "bottommat" );
 
 		if ( topMat != NULL || leftMat != NULL || rightMat != NULL || bottomMat != NULL || cornerMat != NULL ) {
-			if ( leftMat == NULL ) {
-				leftMat = topMat;
-			}
 			if ( rightMat == NULL ) {
 				rightMat = leftMat;
 			}
@@ -1913,29 +2014,20 @@ void idWindow::DrawBorderAndCaption(const idRectangle &drawRect) {
 				}
 			}
 
-			float marginLeft = 0.0f;
-			float marginRight = 0.0f;
-			float marginTop = 0.0f;
-			float marginBottom = 0.0f;
-			idWinVar *marginsVar = GetWinVarByName( "margins", false );
-			if ( marginsVar != NULL ) {
-				ParseFloatQuadValue( marginsVar->c_str(), marginLeft, marginRight, marginTop, marginBottom );
+			if ( windowDefType.Icmp( "superWindowDef" ) == 0 ) {
+				DrawRetailSuperWindowFrame( dc, drawRect, cornerMat, leftMat, topMat, cornerWidth, cornerHeight, edgeSizeX, edgeSizeY );
+				return;
 			}
 
-			cornerWidth = idMath::ClampFloat( 0.0f, drawRect.w * 0.5f, cornerWidth );
-			cornerHeight = idMath::ClampFloat( 0.0f, drawRect.h * 0.5f, cornerHeight );
-			edgeSizeX = idMath::ClampFloat( 0.0f, drawRect.w, edgeSizeX );
-			edgeSizeY = idMath::ClampFloat( 0.0f, drawRect.h, edgeSizeY );
+			cornerWidth = idMath::ClampFloat( 0.0f, drawRect.w * 0.5f, idMath::Fabs( cornerWidth ) );
+			cornerHeight = idMath::ClampFloat( 0.0f, drawRect.h * 0.5f, idMath::Fabs( cornerHeight ) );
+			edgeSizeX = idMath::ClampFloat( 0.0f, drawRect.w, idMath::Fabs( edgeSizeX ) );
+			edgeSizeY = idMath::ClampFloat( 0.0f, drawRect.h, idMath::Fabs( edgeSizeY ) );
 
-			const float horizontalInsetLeft = ( cornerWidth > marginLeft ) ? cornerWidth : marginLeft;
-			const float horizontalInsetRight = ( cornerWidth > marginRight ) ? cornerWidth : marginRight;
-			const float verticalInsetTop = ( cornerHeight > marginTop ) ? cornerHeight : marginTop;
-			const float verticalInsetBottom = ( cornerHeight > marginBottom ) ? cornerHeight : marginBottom;
-
-			const float horizontalX = drawRect.x + horizontalInsetLeft;
-			const float horizontalW = drawRect.w - horizontalInsetLeft - horizontalInsetRight;
-			const float verticalY = drawRect.y + verticalInsetTop;
-			const float verticalH = drawRect.h - verticalInsetTop - verticalInsetBottom;
+			const float horizontalX = drawRect.x + cornerWidth;
+			const float horizontalW = drawRect.w - cornerWidth - cornerWidth;
+			const float verticalY = drawRect.y + cornerHeight;
+			const float verticalH = drawRect.h - cornerHeight - cornerHeight;
 
 			if ( topMat != NULL && edgeSizeY > 0.0f && horizontalW > 0.0f ) {
 				dc->DrawMaterial( horizontalX, drawRect.y, horizontalW, edgeSizeY, topMat, matColor );
@@ -1963,7 +2055,6 @@ void idWindow::DrawBorderAndCaption(const idRectangle &drawRect) {
 			}
 		}
 	}
-
 	if ( IsTabDef() && parent != NULL && parent->IsTabContainerDef() ) {
 		const bool hasSolidBackColor = ( backColor.w() > 0.0f );
 		const bool hasBackgroundMaterial = ( background != NULL && matColor.w() > 0.0f );
@@ -2034,7 +2125,28 @@ void idWindow::DrawBorderAndCaption(const idRectangle &drawRect) {
 			}
 		}
 
-		DrawTabSeparatorLines( dc, drawRect, separatorStyle, separatorColor, parentVerticalTabs, tabCutouts.Num() > 0 ? &tabCutouts : NULL );
+		idRectangle separatorRect = drawRect;
+		if ( !separatorStyle.useFullRect ) {
+			// PREY treats "seperatorMargin" as a bool: when false, the page separator
+			// is inset by the parent tab container's tabMargins before the edge lines are drawn.
+			float marginStart = 0.0f;
+			float marginEnd = 0.0f;
+			GetTabContainerMargins( parent, marginStart, marginEnd );
+
+			if ( parentVerticalTabs ) {
+				separatorRect.y += marginStart;
+				separatorRect.h -= ( marginStart + marginEnd );
+			} else {
+				separatorRect.x += marginStart;
+				separatorRect.w -= ( marginStart + marginEnd );
+			}
+
+			if ( separatorRect.w <= 0.0f || separatorRect.h <= 0.0f ) {
+				return;
+			}
+		}
+
+		DrawTabSeparatorLines( dc, separatorRect, separatorStyle, separatorColor, tabCutouts.Num() > 0 ? &tabCutouts : NULL );
 	}
 }
 
@@ -3446,32 +3558,21 @@ int idWindow::GetTabContainerTabAt( float x, float y ) const {
 		return -1;
 	}
 
+	const idRectangle containerRect( actualX, actualY, drawRect.w, drawRect.h );
+
 	tabContainerLayout_t layout;
-	if ( !BuildTabContainerLayout( this, drawRect, tabCount, layout ) ) {
+	if ( !BuildTabContainerLayout( this, containerRect, tabCount, layout ) ) {
 		return -1;
 	}
 
-	if ( layout.verticalTabs ) {
-		const float right = drawRect.x + layout.tabThickness;
-		if ( x < drawRect.x || x > right || y < layout.spanStart || y > layout.spanEnd ) {
-			return -1;
-		}
-	} else {
-		const float bottom = drawRect.y + layout.tabThickness;
-		if ( x < layout.spanStart || x > layout.spanEnd || y < drawRect.y || y > bottom ) {
-			return -1;
+	for ( int tabIndex = 0; tabIndex < tabCount; ++tabIndex ) {
+		const idRectangle tabRect = GetTabButtonRect( containerRect, layout, tabIndex );
+		if ( TabButtonRectContainsCursor( tabRect, layout.verticalTabs, tabIndex == ( tabCount - 1 ), x, y ) ) {
+			return tabIndex;
 		}
 	}
 
-	const float offset = layout.verticalTabs ? ( y - layout.spanStart ) : ( x - layout.spanStart );
-	int index = idMath::FtoiFast( offset / layout.spanPerTab );
-	if ( index < 0 ) {
-		index = 0;
-	} else if ( index >= tabCount ) {
-		index = tabCount - 1;
-	}
-
-	return index;
+	return -1;
 }
 
 /*
@@ -3527,17 +3628,42 @@ void idWindow::UpdateTabContainerState( bool runActivateScript ) {
 		++tabOrdinal;
 	}
 
-	if ( captureChild != NULL && captureChild->IsTabDef() && captureChild != activeTab ) {
-		captureChild->LoseCapture();
-		captureChild = NULL;
-	}
 	if ( overChild != NULL && overChild->IsTabDef() && overChild != activeTab ) {
 		overChild->MouseExit();
 		overChild = NULL;
 	}
-	if ( focusedChild != NULL && focusedChild->IsTabDef() && focusedChild != activeTab ) {
-		focusedChild->LoseFocus();
-		focusedChild = NULL;
+
+	idWindow *desktop = ( gui != NULL ) ? gui->GetDesktop() : NULL;
+	if ( desktop != NULL ) {
+		idWindow *desktopCapture = desktop->captureChild;
+		if ( desktopCapture != NULL && desktopCapture != activeTab && !IsWindowDescendantOf( desktopCapture, activeTab ) ) {
+			for ( int i = 0; i < drawWindows.Num(); ++i ) {
+				idWindow *child = drawWindows[ i ].win;
+				if ( child == NULL || !child->IsTabDef() || child == activeTab ) {
+					continue;
+				}
+				if ( IsWindowDescendantOf( desktopCapture, child ) ) {
+					desktopCapture->LoseCapture();
+					desktop->captureChild = NULL;
+					break;
+				}
+			}
+		}
+
+		idWindow *desktopFocus = desktop->focusedChild;
+		if ( desktopFocus != NULL && desktopFocus != activeTab && !IsWindowDescendantOf( desktopFocus, activeTab ) ) {
+			for ( int i = 0; i < drawWindows.Num(); ++i ) {
+				idWindow *child = drawWindows[ i ].win;
+				if ( child == NULL || !child->IsTabDef() || child == activeTab ) {
+					continue;
+				}
+				if ( IsWindowDescendantOf( desktopFocus, child ) ) {
+					desktopFocus->LoseFocus();
+					desktop->focusedChild = NULL;
+					break;
+				}
+			}
+		}
 	}
 
 	if ( activeTab != NULL && runActivateScript ) {

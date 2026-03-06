@@ -36,6 +36,7 @@ This document defines platform direction for OpenPrey and how SDL3 + Meson are u
 - `tools/build/meson_setup.ps1` is the standard Windows entry point.
 - `builddir/` is the standard build output directory.
 - `.install/` is the standard staged runtime package root.
+- `.home/` is the standard repo-local save/config/log root for validation runs launched from `.install/`.
 
 ## Bring-Up Staging
 

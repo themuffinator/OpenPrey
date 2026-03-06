@@ -1220,8 +1220,8 @@
 									editDef MCS_MaxPlayersEdit {
 										rect		185, 0, 35, 24
 										cvar		"si_maxPlayers"
-										maxchars 	1
-										cvarmax		8
+										maxchars 	2
+										cvarmax		32
 										textalign	2
 										textscale	0.33
 										shadow		1

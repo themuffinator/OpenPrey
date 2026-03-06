@@ -50,6 +50,8 @@ idCVar	idSessionLocal::com_wipeSeconds( "com_wipeSeconds", "1", CVAR_SYSTEM, "" 
 idCVar	idSessionLocal::com_guid( "com_guid", "", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_ROM, "" );
 idCVar	s_muteUnfocused( "s_muteUnfocused", "0", CVAR_ARCHIVE | CVAR_BOOL, "mute all audio when the application is out of focus" );
 
+extern idCVar g_levelloadmusic;
+
 idSessionLocal		sessLocal;
 idSession			*session = &sessLocal;
 
@@ -354,6 +356,48 @@ static bool Session_ModuleSupportsMultiplayer( const char *moduleName ) {
 
 static bool Session_IsMultiplayerGameType( const char *gameType ) {
 	return gameType && gameType[ 0 ] && idStr::Icmp( gameType, "singleplayer" ) != 0;
+}
+
+static void Session_AddUniqueSaveGameSearchDir( idStrList &gameDirs, const char *gameDir ) {
+	if ( gameDir == NULL || gameDir[ 0 ] == '\0' ) {
+		return;
+	}
+
+	if ( gameDirs.FindIndex( gameDir ) == -1 ) {
+		gameDirs.Append( gameDir );
+	}
+}
+
+static void Session_BuildSaveGameSearchDirs( idStrList &gameDirs, const char *preferredGameDir = NULL ) {
+	gameDirs.Clear();
+	Session_AddUniqueSaveGameSearchDir( gameDirs, preferredGameDir );
+	Session_AddUniqueSaveGameSearchDir( gameDirs, cvarSystem->GetCVarString( "fs_game" ) );
+	Session_AddUniqueSaveGameSearchDir( gameDirs, OPENPREY_GAMEDIR );
+	Session_AddUniqueSaveGameSearchDir( gameDirs, BASE_GAMEDIR );
+}
+
+static idFile *Session_OpenSaveGameReadHandle( const char *relativePath, const char *preferredGameDir, idStr *resolvedGameDir = NULL ) {
+	idStrList searchGameDirs;
+	Session_BuildSaveGameSearchDirs( searchGameDirs, preferredGameDir );
+
+	for ( int i = 0; i < searchGameDirs.Num(); i++ ) {
+		idFile *file = fileSystem->OpenFileRead( relativePath, true, searchGameDirs[ i ].c_str() );
+		if ( file != NULL ) {
+			if ( resolvedGameDir != NULL ) {
+				*resolvedGameDir = searchGameDirs[ i ];
+			}
+			return file;
+		}
+	}
+
+	if ( resolvedGameDir != NULL ) {
+		resolvedGameDir->Clear();
+	}
+	return NULL;
+}
+
+static bool Session_IsCompatibleSaveGameGameName( const idStr &gameName ) {
+	return gameName.Icmp( "Prey" ) == 0 || gameName.Icmp( GAME_NAME ) == 0;
 }
 
 void RandomizeStack( void ) {
@@ -1978,6 +2022,10 @@ Exits with mapSpawned = true
 void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
 	int		i;
 	bool	reloadingSameMap;
+	const bool playLevelLoadMusic =
+		!idAsyncNetwork::serverDedicated.GetBool() &&
+		menuSoundWorld != NULL &&
+		g_levelloadmusic.GetBool();
 
 	loadingAssetQueueActive = false;
 	loadingAssetQueueTotal = 0;
@@ -1998,6 +2046,11 @@ void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
 
 	// clear all menu sounds
 	menuSoundWorld->ClearAllSoundEmitters();
+	if ( playLevelLoadMusic ) {
+		SetPlayingSoundWorld( menuSoundWorld );
+		soundSystem->SetMute( false );
+		menuSoundWorld->PlayShaderDirectly( "guisounds_menu_music", 3 );
+	}
 
 	// unpause the game sound world
 	// NOTE: we UnPause again later down. not sure this is needed
@@ -2202,6 +2255,9 @@ void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
 	Sys_SetPhysicalWorkMemory( -1, -1 );
 
 	// set the game sound world for playback
+	if ( playLevelLoadMusic ) {
+		menuSoundWorld->ClearAllSoundEmitters();
+	}
 	SetPlayingSoundWorld( sw );
 
 	// when loading a save game the sound is paused
@@ -2270,15 +2326,15 @@ bool idSessionLocal::HandleQuickLoad( void ) {
 	idStr fullPath = "savegames/";
 	fullPath += loadFile;
 
-	idStr game = cvarSystem->GetCVarString( "fs_game" );
-	idFile *quickSaveFile = fileSystem->OpenFileRead( fullPath, true, game.Length() ? game.c_str() : NULL );
+	idStr resolvedGameDir;
+	idFile *quickSaveFile = Session_OpenSaveGameReadHandle( fullPath.c_str(), NULL, &resolvedGameDir );
 	if ( quickSaveFile == NULL ) {
 		common->Warning( "Quick save file was not found." );
 		return false;
 	}
 
 	fileSystem->CloseFile( quickSaveFile );
-	return LoadGame( saveName );
+	return LoadGame( saveName, resolvedGameDir.c_str() );
 }
 
 /*
@@ -2495,7 +2551,7 @@ bool idSessionLocal::SaveGame( const char *saveName, bool autosave ) {
 	// Game Name / Version / Map Name / Persistant Player Info
 
 	// game
-	const char *gamename = GAME_NAME;
+	const char *gamename = "Prey";
 	fileOut->WriteString( gamename );
 
 	// version
@@ -2580,7 +2636,7 @@ bool idSessionLocal::SaveGame( const char *saveName, bool autosave ) {
 idSessionLocal::LoadGame
 ===============
 */
-bool idSessionLocal::LoadGame( const char *saveName ) { 
+bool idSessionLocal::LoadGame( const char *saveName, const char *preferredGameDir ) { 
 #ifdef	ID_DEDICATED
 	common->Printf( "Dedicated servers cannot load games.\n" );
 	return false;
@@ -2615,10 +2671,7 @@ bool idSessionLocal::LoadGame( const char *saveName ) {
 	in += loadFile;
 
 	// Open savegame file
-	// only allow loads from the game directory because we don't want a base game to load
-	idStr game = cvarSystem->GetCVarString( "fs_game" );
-	savegameFile = fileSystem->OpenFileRead( in, true, game.Length() ? game : NULL );
-
+	savegameFile = Session_OpenSaveGameReadHandle( in.c_str(), preferredGameDir );
 	if ( savegameFile == NULL ) {
 		common->Warning( "Couldn't open savegame file %s", in.c_str() );
 		return false;
@@ -2633,7 +2686,7 @@ bool idSessionLocal::LoadGame( const char *saveName ) {
 	savegameFile->ReadString( gamename );
 
 	// if this isn't a savegame for the correct game, abort loadgame
-	if ( gamename != GAME_NAME ) {
+	if ( !Session_IsCompatibleSaveGameGameName( gamename ) ) {
 		common->Warning( "Attempted to load an invalid savegame: %s", in.c_str() );
 
 		loadingSaveGame = false;
@@ -2656,8 +2709,7 @@ bool idSessionLocal::LoadGame( const char *saveName ) {
 	// check the version, if it doesn't match, cancel the loadgame,
 	// but still load the map with the persistant playerInfo from the header
 	// so that the player doesn't lose too much progress.
-	if ( savegameVersion != SAVEGAME_VERSION &&
-		 !( savegameVersion == 16 && SAVEGAME_VERSION == 17 ) ) {	// handle savegame v16 in v17
+	if ( savegameVersion != SAVEGAME_VERSION && savegameVersion != 1 ) {
 		common->Warning( "Savegame Version mismatch: aborting loadgame and starting level with persistent data" );
 		loadingSaveGame = false;
 		fileSystem->CloseFile( savegameFile );

@@ -34,6 +34,7 @@
 # Debug folders
 /build/
 /builddir/
+/builddir-*/
 /builddir_*/
 /build_meson/
 /build_meson_msvc/
@@ -44,12 +45,19 @@
 /subprojects/packagecache/
 /subprojects/SDL3-*/
 /.install/crashes/
+/.install/openprey/
 /.install/openbase/*.cfg
 _tmp_*
 /.tmp/
 /.home/
+/.home_*/
+/.install/.home/
 *.pdb
 $dst/
+$tmp/
 *.bimage
-.install/*.cfg
-.install/openprey/*.cfg
+/.install/*.cfg
+/repro_*.cfg
+/stdout*.txt
+/stderr*.txt
+/references/PREY.exe_disassembly.txt

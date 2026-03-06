@@ -19,9 +19,12 @@ This document defines the baseline assumptions for the OpenQ4 -> OpenPrey migrat
 
 ## Runtime Layout
 
+- Source-side runtime overlay: `openprey/`
 - Engine binaries: `.install/`
 - Game modules and staged overrides: `.install/openprey/`
 - Working build artifacts: `builddir/`
+- Local save/config/log state for repo-based validation runs: `.home/`
+- Temporary task artifacts: `.tmp/`
 
 ## Runtime Module Model
 
@@ -41,7 +44,7 @@ This document defines the baseline assumptions for the OpenQ4 -> OpenPrey migrat
 
 1. Build with `tools/build/meson_setup.ps1`.
 2. Stage `.install/` with `meson install -C builddir --no-rebuild --skip-subprojects`.
-3. Launch SP or MP using mode-specific configs.
+3. Launch SP or MP from `.install/` in windowed mode with a repo-local save path (for example `+set r_fullscreen 0 +set fs_savepath ..\.home`).
 4. Review `logs/openprey.log` under `fs_savepath`.
 5. Resolve warnings/errors in code paths before adding content-side workarounds.
 

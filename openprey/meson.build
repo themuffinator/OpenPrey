@@ -40,3 +40,8 @@ install_subdir(
   'script',
   install_dir: install_gamedir_dir,
 )
+
+install_subdir(
+  'strings',
+  install_dir: install_gamedir_dir,
+)

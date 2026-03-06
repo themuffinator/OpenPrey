@@ -1853,6 +1853,30 @@ bool idEntity::CanPlayChatterSounds( void ) const {
 
 /*
 ================
+idEntity::ResolveSoundName
+================
+*/
+bool idEntity::ResolveSoundName( const char *soundName, const char *&sound ) const {
+	const idKeyValue *keyValue;
+
+	sound = NULL;
+
+	if ( soundName == NULL || soundName[0] == '\0' ) {
+		return false;
+	}
+
+	keyValue = spawnArgs.FindKey( soundName );
+	if ( keyValue != NULL ) {
+		sound = keyValue->GetValue().c_str();
+		return sound[0] != '\0';
+	}
+
+	sound = soundName;
+	return true;
+}
+
+/*
+================
 idEntity::StartSound
 ================
 */
@@ -1864,15 +1888,9 @@ bool idEntity::StartSound( const char *soundName, const s_channelType channel, i
 		*length = 0;
 	}
 
-	// we should ALWAYS be playing sounds from the def.
-	// hardcoded sounds MUST be avoided at all times because they won't get precached.
-	assert( idStr::Icmpn( soundName, "snd_", 4 ) == 0 );
-
-	if ( !spawnArgs.GetString( soundName, "", &sound ) ) {
-		return false;
-	}
-
-	if ( sound[0] == '\0' ) {
+	// Prefer entity sound aliases for precaching, but accept direct sound shader
+	// names because Prey scripts also route those through this event path.
+	if ( !ResolveSoundName( soundName, sound ) ) {
 		return false;
 	}
 

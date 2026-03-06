@@ -34,6 +34,28 @@ If you have questions concerning this license or the applicable additional terms
 #include "UserInterfaceLocal.h"
 #include "SliderWindow.h"
 
+static const float Slider_ScrollbarThumbRangeDivisor = 15.0f;
+
+static float Slider_VolumeSliderToDb( const float sliderValue ) {
+	if ( sliderValue <= 0.0f ) {
+		return -60.0f;
+	}
+	if ( sliderValue >= 1.0f ) {
+		return 0.0f;
+	}
+	return idMath::Log( sliderValue ) * ( 6.0f / 0.693147181f );
+}
+
+static float Slider_DbToVolumeSlider( const float dbValue ) {
+	if ( dbValue <= -60.0f ) {
+		return 0.0f;
+	}
+	if ( dbValue >= 0.0f ) {
+		return 1.0f;
+	}
+	return idMath::Pow( 2.0f, dbValue * ( 1.0f / 6.0f ) );
+}
+
 /*
 ============
 idSliderWindow::CommonInit
@@ -55,6 +77,7 @@ void idSliderWindow::CommonInit() {
 	scrollbar = false;
 
 	verticalFlip = false;
+	volumeSlider = false;
 }
 
 idSliderWindow::idSliderWindow(idDeviceContext *d, idUserInterfaceLocal *g) : idWindow(d, g) {
@@ -91,6 +114,10 @@ bool idSliderWindow::ParseInternalVar(const char *_name, idParser *src) {
 	}
 	if (idStr::Icmp(_name, "verticalflip") == 0) {
 		verticalFlip = src->ParseBool();
+		return true;
+	}
+	if (idStr::Icmp(_name, "volumeslider") == 0) {
+		volumeSlider = src->ParseBool();
 		return true;
 	}
 	if (idStr::Icmp(_name, "scrollbar") == 0) {
@@ -206,16 +233,57 @@ void idSliderWindow::SetValue(float _value) {
 	value = _value;
 }
 
+void idSliderWindow::UpdateThumbMetrics( const idRectangle &sliderRect ) {
+	if ( thumbMat == NULL ) {
+		thumbWidth = 0.0f;
+		thumbHeight = 0.0f;
+		return;
+	}
+
+	const float baseThumbWidth = Max( 0.0f, static_cast<float>( thumbMat->GetImageWidth() ) );
+	const float baseThumbHeight = Max( 0.0f, static_cast<float>( thumbMat->GetImageHeight() ) );
+	thumbWidth = baseThumbWidth;
+	thumbHeight = baseThumbHeight;
+
+	if ( !scrollbar ) {
+		return;
+	}
+
+	const float range = Max( high - low, 0.0f );
+	const float axisLength = vertical ? sliderRect.h : sliderRect.w;
+	const float baseThumbSize = vertical ? baseThumbHeight : baseThumbWidth;
+
+	if ( axisLength <= 0.0f ) {
+		if ( vertical ) {
+			thumbHeight = 0.0f;
+		} else {
+			thumbWidth = 0.0f;
+		}
+		return;
+	}
+
+	const float clampedBaseThumbSize = idMath::ClampFloat( 0.0f, axisLength, baseThumbSize );
+	const float thumbSizingRange = axisLength / Slider_ScrollbarThumbRangeDivisor;
+	float thumbSize = clampedBaseThumbSize;
+
+	if ( thumbSizingRange > 0.0f ) {
+		const float clampedRange = idMath::ClampFloat( 0.0f, thumbSizingRange, range );
+		thumbSize += ( axisLength - clampedBaseThumbSize ) * ( 1.0f - ( clampedRange / thumbSizingRange ) );
+		thumbSize = idMath::ClampFloat( clampedBaseThumbSize, axisLength, thumbSize );
+	}
+
+	if ( vertical ) {
+		thumbHeight = thumbSize;
+	} else {
+		thumbWidth = thumbSize;
+	}
+}
+
 void idSliderWindow::Draw(int time, float x, float y) {
 	idVec4 color = foreColor;
 
 	if ( !cvar && !buddyWin ) {
 		return;
-	}
-
-	if ( !thumbWidth || !thumbHeight ) {
-		thumbWidth = thumbMat->GetImageWidth();
-		thumbHeight = thumbMat->GetImageHeight();
 	}
 
 	UpdateCvar( true );
@@ -226,6 +294,7 @@ void idSliderWindow::Draw(int time, float x, float y) {
 	}
 
 	float range = high - low;
+	UpdateThumbMetrics( drawRect );
 
 	if ( range <= 0.0f ) {
 		return;
@@ -236,12 +305,12 @@ void idSliderWindow::Draw(int time, float x, float y) {
 		if ( verticalFlip ) {
 			thumbPos = 1.f - thumbPos;
 		}
-		thumbPos *= drawRect.h - thumbHeight;
+		thumbPos *= Max( drawRect.h - thumbHeight, 0.0f );
 		thumbPos += drawRect.y;
 		thumbRect.y = thumbPos;
 		thumbRect.x = drawRect.x;
 	} else {
-		thumbPos *= drawRect.w - thumbWidth;
+		thumbPos *= Max( drawRect.w - thumbWidth, 0.0f );
 		thumbPos += drawRect.x;
 		thumbRect.x = thumbPos;
 		thumbRect.y = drawRect.y;
@@ -275,14 +344,16 @@ void idSliderWindow::DrawBackground(const idRectangle &_drawRect) {
 		return;
 	}
 
+	UpdateThumbMetrics( _drawRect );
+
 	idRectangle r = _drawRect;
 	if (!scrollbar) {
 		if ( vertical ) {
 			r.y += thumbHeight / 2.f;
-			r.h -= thumbHeight;
+			r.h = Max( r.h - thumbHeight, 0.0f );
 		} else {
 			r.x += thumbWidth / 2.0;
-			r.w -= thumbWidth;
+			r.w = Max( r.w - thumbWidth, 0.0f );
 		}
 	}
 	idWindow::DrawBackground(r);
@@ -299,12 +370,13 @@ const char *idSliderWindow::RouteMouseCoords(float xd, float yd) {
 	idRectangle r = drawRect;
 	r.x = actualX;
 	r.y = actualY;
+	UpdateThumbMetrics( r );
 	r.x += thumbWidth / 2.0;
-	r.w -= thumbWidth;
+	r.w = Max( r.w - thumbWidth, 0.0f );
 	if (vertical) {
 		r.y += thumbHeight / 2;
-		r.h -= thumbHeight;
-		if (gui->CursorY() >= r.y && gui->CursorY() <= r.Bottom()) {
+		r.h = Max( r.h - thumbHeight, 0.0f );
+		if ( r.h > 0.0f && gui->CursorY() >= r.y && gui->CursorY() <= r.Bottom()) {
 			pct = (gui->CursorY() - r.y) / r.h;
 			if ( verticalFlip ) {
 				pct = 1.f - pct;
@@ -324,9 +396,7 @@ const char *idSliderWindow::RouteMouseCoords(float xd, float yd) {
 			}
 		}
 	} else {
-		r.x += thumbWidth / 2;
-		r.w -= thumbWidth;
-		if (gui->CursorX() >= r.x && gui->CursorX() <= r.Right()) {
+		if ( r.w > 0.0f && gui->CursorX() >= r.x && gui->CursorX() <= r.Right()) {
 			pct = (gui->CursorX() - r.x) / r.w;
 			value = low + (high - low) * pct;
 		} else if (gui->CursorX() < r.x) {
@@ -393,13 +463,17 @@ void idSliderWindow::UpdateCvar( bool read, bool force ) {
 		return;
 	}
 	if ( force || liveUpdate ) {
-		value = cvar->GetFloat();
-		if ( value != gui->State().GetFloat( cvarStr ) ) {
-			if ( read ) {
+		if ( read ) {
+			const float cvarValue = cvar->GetFloat();
+			value = volumeSlider ? Slider_DbToVolumeSlider( cvarValue ) : cvarValue;
+			if ( force || idMath::Fabs( value - gui->State().GetFloat( cvarStr ) ) > 0.0001f ) {
 				gui->SetStateFloat( cvarStr, value );
-			} else {
-				value = gui->State().GetFloat( cvarStr );
-				cvar->SetFloat( value );
+			}
+		} else {
+			value = gui->State().GetFloat( cvarStr );
+			const float cvarValue = volumeSlider ? Slider_VolumeSliderToDb( value ) : value;
+			if ( force || idMath::Fabs( cvarValue - cvar->GetFloat() ) > 0.0001f ) {
+				cvar->SetFloat( cvarValue );
 			}
 		}
 	}

@@ -111,6 +111,8 @@ typedef struct {
 } WinConData;
 
 static WinConData s_wcd;
+static const COLORREF CONSOLE_TEXT_BACKGROUND_COLOR = RGB(0xd7, 0xee, 0xea);
+static const COLORREF CONSOLE_TEXT_COLOR = RGB(0x12, 0x34, 0x63);
 
 static LONG WINAPI ConWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	char* cmdString;
@@ -135,10 +137,17 @@ static LONG WINAPI ConWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 			win32.win_viewlog.SetBool(false);
 		}
 		return 0;
+	case WM_CTLCOLOREDIT:
+		if ((HWND)lParam == s_wcd.hwndInputLine) {
+			SetBkColor((HDC)wParam, CONSOLE_TEXT_BACKGROUND_COLOR);
+			SetTextColor((HDC)wParam, CONSOLE_TEXT_COLOR);
+			return (long)s_wcd.hbrEditBackground;
+		}
+		break;
 	case WM_CTLCOLORSTATIC:
 		if ((HWND)lParam == s_wcd.hwndBuffer) {
-			SetBkColor((HDC)wParam, RGB(0x1b, 0x20, 0x0a));
-			SetTextColor((HDC)wParam, RGB(0xf0, 0x9e, 0x0d));
+			SetBkColor((HDC)wParam, CONSOLE_TEXT_BACKGROUND_COLOR);
+			SetTextColor((HDC)wParam, CONSOLE_TEXT_COLOR);
 			return (long)s_wcd.hbrEditBackground;
 		}
 		else if ((HWND)lParam == s_wcd.hwndErrorBox) {
@@ -179,7 +188,7 @@ static LONG WINAPI ConWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 		}
 		break;
 	case WM_CREATE:
-		s_wcd.hbrEditBackground = CreateSolidBrush(RGB(0x1b, 0x20, 0x0a));
+		s_wcd.hbrEditBackground = CreateSolidBrush(CONSOLE_TEXT_BACKGROUND_COLOR);
 		s_wcd.hbrErrorBackground = CreateSolidBrush(RGB(0x80, 0x80, 0x80));
 		SetTimer(hWnd, 1, 1000, NULL);
 		break;

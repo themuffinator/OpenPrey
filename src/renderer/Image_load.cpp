@@ -89,6 +89,14 @@ ID_INLINE void idImage::DeriveOpts() {
 		opts.colorFormat = CFM_DEFAULT;
 // jmarshall - no need to compress
 		switch (usage) {
+		case TD_FONT:
+			// Retail Prey routes fonts/ images through the dedicated font path so
+			// atlas coverage, mip generation, and swizzle stay consistent.
+			opts.format = FMT_DXT1;
+			opts.colorFormat = CFM_GREEN_ALPHA;
+			opts.numLevels = 4;
+			opts.gammaMips = true;
+			break;
 		case TD_DEPTH:
 			opts.format = FMT_DEPTH;
 			break;
@@ -643,6 +651,11 @@ CopyFramebuffer
 void idImage::CopyFramebuffer( int x, int y, int imageWidth, int imageHeight ) {
 	glBindTexture( ( opts.textureType == TT_CUBIC ) ? GL_TEXTURE_CUBE_MAP_EXT : GL_TEXTURE_2D, texnum );
 
+	if ( cvarSystem->GetCVarBool( "g_lowresFullscreenFX" ) ) {
+		imageWidth = 512;
+		imageHeight = 512;
+	}
+
 	const bool readingFromRenderTexture = ( backEnd.renderTexture != NULL ) && ( backEnd.renderTexture->GetNumColorImages() > 0 );
 	const GLenum readAttachment = GL_COLOR_ATTACHMENT0;
 
@@ -719,6 +732,11 @@ CopyDepthbuffer
 */
 void idImage::CopyDepthbuffer( int x, int y, int imageWidth, int imageHeight ) {
 	glBindTexture( ( opts.textureType == TT_CUBIC ) ? GL_TEXTURE_CUBE_MAP_EXT : GL_TEXTURE_2D, texnum );
+
+	if ( cvarSystem->GetCVarBool( "g_lowresFullscreenFX" ) ) {
+		imageWidth = 512;
+		imageHeight = 512;
+	}
 
 	opts.width = imageWidth;
 	opts.height = imageHeight;

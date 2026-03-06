@@ -217,10 +217,7 @@ if ($exitCode -eq 0 -and $effectiveArgs.Length -gt 0 -and $effectiveArgs[0] -eq 
     )
     $cleanupDirs = @(
         (Join-Path $repoRoot ".install\openprey"),
-        (Join-Path $repoRoot "builddir\openprey"),
-        (Join-Path $repoRoot "install\openprey"),
-        (Join-Path $repoRoot "install\openbase"),
-        (Join-Path $repoRoot "builddir\openbase")
+        (Join-Path $repoRoot "builddir\openprey")
     )
     foreach ($cleanupDir in $cleanupDirs) {
         if (-not (Test-Path $cleanupDir)) {

@@ -30,48 +30,13 @@ If you have questions concerning this license or the applicable additional terms
 
 
 #include "Session_local.h"
+#include "../sound/snd_local.h"
+
+#include <stdio.h>
 
 idCVar	idSessionLocal::gui_configServerRate( "gui_configServerRate", "0", CVAR_GUI | CVAR_ARCHIVE | CVAR_ROM | CVAR_INTEGER, "" );
 
-/*
-=================
-MapSupportsStartServerGameType
-=================
-*/
-static bool MapSupportsStartServerGameType( const idDict *dict, const char *gameType ) {
-	if ( !dict || !gameType || !gameType[0] ) {
-		return false;
-	}
-
-	// Match the multiplayer vote/admin behavior so DM and Team DM can use any standard MP map type.
-	if ( !idStr::Icmp( gameType, "DM" ) || !idStr::Icmp( gameType, "Team DM" ) ) {
-		return dict->GetBool( "DM" ) ||
-			dict->GetBool( "Team DM" ) ||
-			dict->GetBool( "CTF" ) ||
-			dict->GetBool( "Tourney" ) ||
-			dict->GetBool( "Arena CTF" );
-	}
-
-	return dict->GetBool( gameType );
-}
-
-/*
-=================
-MapSupportsAnyMPGameType
-=================
-*/
-static bool MapSupportsAnyMPGameType( const idDict *dict ) {
-	if ( !dict ) {
-		return false;
-	}
-
-	return dict->GetBool( "DM" ) ||
-		dict->GetBool( "Team DM" ) ||
-		dict->GetBool( "CTF" ) ||
-		dict->GetBool( "Tourney" ) ||
-		dict->GetBool( "Arena CTF" ) ||
-		dict->GetBool( "DeadZone" );
-}
+static const int LISTEN_SERVER_MAX_PLAYERS = MAX_ASYNC_CLIENTS;
 
 /*
 =================
@@ -92,62 +57,298 @@ static int GetListenServerPlayerWarningLimit( const int serverRatePreset, const 
 		case 4:
 		case 5:
 			// Fiber/Modern and LAN presets should not trigger the legacy 4-player listen warning.
-			return 16;
+			return LISTEN_SERVER_MAX_PLAYERS;
 		default:
 			break;
 	}
 
 	// Manual mode: infer a safe listen target from net_serverMaxClientRate.
-	if ( maxClientRate <= 8000 ) {
+	if ( maxClientRate <= 12000 ) {
 		return 3;
 	}
-	if ( maxClientRate <= 9500 ) {
+	if ( maxClientRate <= 16000 ) {
 		return 4;
 	}
-	if ( maxClientRate <= 10500 ) {
+	if ( maxClientRate <= 24000 ) {
 		return 5;
 	}
-	return 16;
+	return LISTEN_SERVER_MAX_PLAYERS;
 }
 
-/*
-=================
-CommitStartServerMapSelection
-=================
-*/
-static void CommitStartServerMapSelection( idUserInterface *gui ) {
+static void Session_AddUniqueSaveGameSearchDir( idStrList &gameDirs, const char *gameDir ) {
+	if ( gameDir == NULL || gameDir[ 0 ] == '\0' ) {
+		return;
+	}
+
+	if ( gameDirs.FindIndex( gameDir ) == -1 ) {
+		gameDirs.Append( gameDir );
+	}
+}
+
+static void Session_BuildSaveGameSearchDirs( idStrList &gameDirs, const char *preferredGameDir = NULL ) {
+	gameDirs.Clear();
+	Session_AddUniqueSaveGameSearchDir( gameDirs, preferredGameDir );
+	Session_AddUniqueSaveGameSearchDir( gameDirs, cvarSystem->GetCVarString( "fs_game" ) );
+	Session_AddUniqueSaveGameSearchDir( gameDirs, OPENPREY_GAMEDIR );
+	Session_AddUniqueSaveGameSearchDir( gameDirs, BASE_GAMEDIR );
+}
+
+static idStr Session_BuildSaveGamePath( const char *saveName, const char *extension ) {
+	idStr path = "savegames/";
+	path += saveName;
+	path.SetFileExtension( extension );
+	return path;
+}
+
+static ID_TIME_T Session_GetSaveGameTimestamp( const char *saveName, const char *gameDir ) {
+	idFile *file = fileSystem->OpenFileRead(
+		Session_BuildSaveGamePath( saveName, ".save" ),
+		true,
+		( gameDir != NULL && gameDir[ 0 ] != '\0' ) ? gameDir : NULL );
+	if ( file == NULL ) {
+		return FILE_NOT_FOUND_TIMESTAMP;
+	}
+
+	const ID_TIME_T timestamp = file->Timestamp();
+	fileSystem->CloseFile( file );
+	return timestamp;
+}
+
+static bool Session_LoadSaveGameDetails( const char *saveName, const char *gameDir, idStr &outSaveName, idStr &outDescription, idStr &outScreenshot ) {
+	outSaveName.Clear();
+	outDescription.Clear();
+	outScreenshot.Clear();
+
+	const idStr descriptionPath = Session_BuildSaveGamePath( saveName, ".txt" );
+	idFile *file = fileSystem->OpenFileRead(
+		descriptionPath,
+		true,
+		( gameDir != NULL && gameDir[ 0 ] != '\0' ) ? gameDir : NULL );
+	if ( file == NULL ) {
+		return false;
+	}
+
+	const int length = file->Length();
+	idList<char> buffer;
+	buffer.SetNum( length + 1 );
+	if ( length > 0 ) {
+		file->Read( buffer.Ptr(), length );
+	}
+	buffer[ length ] = '\0';
+	fileSystem->CloseFile( file );
+
+	idLexer src( LEXFL_NOERRORS | LEXFL_NOSTRINGCONCAT );
+	src.LoadMemory( buffer.Ptr(), length, descriptionPath.c_str() );
+	if ( !src.IsLoaded() ) {
+		return false;
+	}
+
+	idToken tok;
+	if ( src.ReadToken( &tok ) ) {
+		outSaveName = tok;
+	}
+	if ( src.ReadToken( &tok ) ) {
+		outDescription = tok;
+	}
+	if ( src.ReadToken( &tok ) ) {
+		outScreenshot = tok;
+	}
+
+	return outSaveName.Length() > 0;
+}
+
+static void Session_RemoveSaveGameFile( const char *saveName, const char *gameDir, const char *extension ) {
+	const idStr relativePath = Session_BuildSaveGamePath( saveName, extension );
+	const char *savePath = cvarSystem->GetCVarString( "fs_savepath" );
+	const char *resolvedGameDir = ( gameDir != NULL && gameDir[ 0 ] != '\0' ) ? gameDir : cvarSystem->GetCVarString( "fs_game" );
+	if ( resolvedGameDir == NULL || resolvedGameDir[ 0 ] == '\0' ) {
+		resolvedGameDir = BASE_GAMEDIR;
+	}
+
+	if ( savePath != NULL && savePath[ 0 ] != '\0' ) {
+		remove( fileSystem->BuildOSPath( savePath, resolvedGameDir, relativePath.c_str() ) );
+		return;
+	}
+
+	fileSystem->RemoveFile( relativePath.c_str() );
+}
+
+#if defined( USE_OPENAL )
+static idStr Session_GetOpenALDeviceName( ALCdevice *device ) {
+	idStr deviceName;
+	if ( device == NULL ) {
+		return deviceName;
+	}
+
+	const ALCchar *activeDeviceName = NULL;
+	if ( alcIsExtensionPresent( device, "ALC_ENUMERATE_ALL_EXT" ) != AL_FALSE ) {
+		activeDeviceName = alcGetString( device, ALC_ALL_DEVICES_SPECIFIER );
+	}
+	if ( CheckALCErrors( device ) != ALC_NO_ERROR || activeDeviceName == NULL || activeDeviceName[ 0 ] == '\0' ) {
+		activeDeviceName = alcGetString( device, ALC_DEVICE_SPECIFIER );
+		CheckALCErrors( device );
+	}
+
+	if ( activeDeviceName != NULL ) {
+		deviceName = reinterpret_cast<const char *>( activeDeviceName );
+		deviceName.Replace( ";", "," );
+	}
+
+	return deviceName;
+}
+
+static bool Session_IsSupportedOpenALRuntime( ALCdevice *device ) {
+	if ( device == NULL ) {
+		return false;
+	}
+
+	ALCint alcMajor = 0;
+	ALCint alcMinor = 0;
+	alcGetIntegerv( device, ALC_MAJOR_VERSION, 1, &alcMajor );
+	alcGetIntegerv( device, ALC_MINOR_VERSION, 1, &alcMinor );
+	if ( CheckALCErrors( device ) != ALC_NO_ERROR ) {
+		return false;
+	}
+
+	return alcMajor > 1 || ( alcMajor == 1 && alcMinor >= 1 );
+}
+
+static bool Session_DeviceSupportsEAX( ALCdevice *device ) {
+	return Session_IsSupportedOpenALRuntime( device ) &&
+		alcIsExtensionPresent( device, "ALC_EXT_EFX" ) == AL_TRUE;
+}
+
+static void Session_BuildMainMenuAudioDeviceChoices( idStr &choiceNames ) {
+	choiceNames.Clear();
+
+	const ALCenum listSpecifier =
+		( alcIsExtensionPresent( NULL, "ALC_ENUMERATE_ALL_EXT" ) != AL_FALSE ) ?
+		ALC_ALL_DEVICES_SPECIFIER :
+		ALC_DEVICE_SPECIFIER;
+	const ALCchar *deviceList = alcGetString( NULL, listSpecifier );
+
+	if ( deviceList != NULL && deviceList[ 0 ] != '\0' ) {
+		for ( const ALCchar *it = deviceList; *it != '\0'; it += strlen( it ) + 1 ) {
+			idStr deviceName = reinterpret_cast<const char *>( it );
+			deviceName.Replace( ";", "," );
+			if ( !deviceName.Length() ) {
+				continue;
+			}
+
+			if ( choiceNames.Length() ) {
+				choiceNames += ";";
+			}
+			choiceNames += deviceName;
+		}
+	}
+
+	if ( !choiceNames.Length() ) {
+		choiceNames = Session_GetOpenALDeviceName( reinterpret_cast<ALCdevice *>( soundSystem->GetOpenALDevice() ) );
+	}
+}
+#endif
+
+static void Session_RefreshMainMenuAudioState( idUserInterface *gui ) {
 	if ( gui == NULL ) {
 		return;
 	}
 
-	int uiMapSelection = gui->State().GetInt( "mapList_sel_0" );
-	const int uiMapHover = gui->State().GetInt( "mapList_hover", "-1" );
-	if ( uiMapHover >= 0 ) {
-		const char *hoverMapId = gui->State().GetString( va( "mapList_item_%d_id", uiMapHover ), "" );
-		if ( hoverMapId[ 0 ] ) {
-			uiMapSelection = uiMapHover;
-			gui->SetStateInt( "mapList_sel_0", uiMapSelection );
+	idStr deviceNames;
+	int openAL = 0;
+	int supportsEax = 0;
+	int eax = 0;
+
+#if defined( USE_OPENAL )
+	cvarSystem->SetCVarBool( "s_useOpenAL", true );
+
+	ALCdevice *device = reinterpret_cast<ALCdevice *>( soundSystem->GetOpenALDevice() );
+	openAL = ( device != NULL ) ? 1 : 0;
+	if ( device != NULL ) {
+		Session_BuildMainMenuAudioDeviceChoices( deviceNames );
+		supportsEax = Session_DeviceSupportsEAX( device ) ? 1 : 0;
+		eax = ( soundSystem->IsEAXAvailable() == 1 ) ? 1 : 0;
+
+		const idStr activeDevice = Session_GetOpenALDeviceName( device );
+		if ( activeDevice.Length() && idStr::Icmp( cvarSystem->GetCVarString( "s_deviceName" ), activeDevice.c_str() ) != 0 ) {
+			cvarSystem->SetCVarString( "s_deviceName", activeDevice.c_str() );
+		}
+		if ( !deviceNames.Length() ) {
+			deviceNames = activeDevice;
 		}
 	}
+#endif
 
-	if ( uiMapSelection < 0 ) {
-		const char *firstMapId = gui->State().GetString( "mapList_item_0_id", "" );
-		if ( firstMapId[ 0 ] == '\0' ) {
-			return;
-		}
-		uiMapSelection = 0;
-		gui->SetStateInt( "mapList_sel_0", uiMapSelection );
-	}
+	gui->SetStateString( "device_name", deviceNames.c_str() );
+	gui->SetStateInt( "openAL", openAL );
+	gui->SetStateInt( "openal", openAL );
+	gui->SetStateInt( "supportsEax", supportsEax );
+	gui->SetStateInt( "eax", eax );
+	gui->SetStateInt( "mixeroption", 0 );
+	gui->SetStateInt( "oldAudioDriver", 0 );
+	gui->HandleNamedEvent( "UpdateOptions" );
+	gui->StateChanged( com_frameTime );
+}
 
-	const int mapNum = gui->State().GetInt( va( "mapList_item_%d_id", uiMapSelection ), "-1" );
-	if ( mapNum < 0 ) {
+/*
+=================
+Session_ScanPlayerModels
+=================
+*/
+static void Session_ScanPlayerModels( idUserInterface *gui, const int time ) {
+	if ( gui == NULL ) {
 		return;
 	}
 
-	const idDict *dict = fileSystem->GetMapDecl( mapNum );
-	if ( dict ) {
-		cvarSystem->SetCVarString( "si_map", dict->GetString( "path" ) );
+	idStr text;
+
+	const bool oldPrecache = cvarSystem->GetCVarBool( "com_precache" );
+	cvarSystem->SetCVarBool( "com_precache", false );
+	const idDecl *playerDef = declManager->FindType( DECL_ENTITYDEF, GAME_PLAYERDEFNAME_MP, false );
+	cvarSystem->SetCVarBool( "com_precache", oldPrecache );
+
+	if ( playerDef == NULL ) {
+		return;
 	}
+
+	const idDict *playerDict = &static_cast<const idDeclEntityDef *>( playerDef )->dict;
+	for ( const idKeyValue *kv = playerDict->MatchPrefix( "model_mp", NULL ); kv != NULL; kv = playerDict->MatchPrefix( "model_mp", kv ) ) {
+		idStr tmp = kv->GetKey();
+		tmp.StripLeading( "model_mp" );
+		const int index = atoi( tmp.c_str() );
+
+		text = playerDict->GetString( va( "mtr_modelPortrait%d", index ), "guis/assets/menu/questionmark" );
+		gui->SetStateString( va( "mp_modelportrait%d", index ), text );
+
+		text = playerDict->GetString( va( "text_modelname%d", index ) );
+		text = common->GetLanguageDict()->GetString( text.c_str() );
+		gui->SetStateString( va( "mp_modelname%d", index ), text );
+	}
+
+	const int currentModel = cvarSystem->GetCVarInteger( "ui_modelNum" );
+	gui->SetStateString( "mp_currentmodelportrait", gui->GetStateString( va( "mp_modelportrait%d", currentModel ) ) );
+	gui->SetStateString( "mp_currentmodelname", gui->GetStateString( va( "mp_modelname%d", currentModel ) ) );
+	gui->StateChanged( time );
+}
+
+/*
+=================
+Session_SelectPlayerModel
+=================
+*/
+static void Session_SelectPlayerModel( idUserInterface *gui, const int time, const int modelNum ) {
+	if ( gui == NULL ) {
+		return;
+	}
+
+	const idStr modelPortrait = gui->GetStateString( va( "mp_modelportrait%d", modelNum ) );
+	if ( !modelPortrait.Length() ) {
+		return;
+	}
+
+	cvarSystem->SetCVarInteger( "ui_modelNum", modelNum );
+	gui->SetStateString( "mp_currentmodelportrait", modelPortrait.c_str() );
+	gui->SetStateString( "mp_currentmodelname", gui->GetStateString( va( "mp_modelname%d", modelNum ) ) );
+	gui->StateChanged( time );
 }
 
 // implements the setup for, and commands from, the main menu
@@ -273,32 +474,41 @@ ID_INLINE int idListSaveGameCompare( const fileTIME_T *a, const fileTIME_T *b ) 
 idSessionLocal::GetSaveGameList
 ===============
 */
-void idSessionLocal::GetSaveGameList( idStrList &fileList, idList<fileTIME_T> &fileTimes ) {
-	int i;
-	idFileList *files;
-
-	// NOTE: no fs_game_base for savegames
-	idStr game = cvarSystem->GetCVarString( "fs_game" );
-	if( game.Length() ) {
-		files = fileSystem->ListFiles( "savegames", ".save", false, false, game );
-	} else {
-		files = fileSystem->ListFiles( "savegames", ".save" );
+void idSessionLocal::GetSaveGameList( idStrList &fileList, idList<fileTIME_T> &fileTimes, idStrList *gameDirs ) {
+	fileList.Clear();
+	fileTimes.Clear();
+	if ( gameDirs != NULL ) {
+		gameDirs->Clear();
 	}
-	
-	fileList = files->GetList();
-	fileSystem->FreeFileList( files );
 
-	for ( i = 0; i < fileList.Num(); i++ ) {
-		ID_TIME_T timeStamp;
+	idStrList searchGameDirs;
+	Session_BuildSaveGameSearchDirs( searchGameDirs );
 
-		fileSystem->ReadFile( "savegames/" + fileList[i], NULL, &timeStamp );
-		fileList[i].StripLeading( '/' );
-		fileList[i].StripFileExtension();
+	for ( int dirIndex = 0; dirIndex < searchGameDirs.Num(); dirIndex++ ) {
+		const char *gameDir = searchGameDirs[ dirIndex ].c_str();
+		idFileList *files = fileSystem->ListFiles( "savegames", ".save", false, false, gameDir );
+		const idStrList &dirFiles = files->GetList();
 
-		fileTIME_T ft;
-		ft.index = i;
-		ft.timeStamp = timeStamp;
-		fileTimes.Append( ft );
+		for ( int i = 0; i < dirFiles.Num(); i++ ) {
+			idStr saveName = dirFiles[ i ];
+			saveName.StripLeading( '/' );
+			saveName.StripFileExtension();
+
+			if ( fileList.FindIndex( saveName ) != -1 ) {
+				continue;
+			}
+
+			fileTIME_T ft;
+			ft.index = fileList.Append( saveName );
+			ft.timeStamp = Session_GetSaveGameTimestamp( saveName.c_str(), gameDir );
+			fileTimes.Append( ft );
+
+			if ( gameDirs != NULL ) {
+				gameDirs->Append( gameDir );
+			}
+		}
+
+		fileSystem->FreeFileList( files );
 	}
 
 	fileTimes.Sort( idListSaveGameCompare );
@@ -310,31 +520,34 @@ idSessionLocal::SetSaveGameGuiVars
 ===============
 */
 void idSessionLocal::SetSaveGameGuiVars( void ) {
+	if ( guiActive == NULL ) {
+		return;
+	}
+
 	int i;
-	idStr name;
 	idStrList fileList;
 	idList<fileTIME_T> fileTimes;
+	idStrList sourceGameDirs;
 
 	loadGameList.Clear();
-	fileList.Clear();
-	fileTimes.Clear();
-// jmarshall - crash fix
-	return;
-// jmarshall end
+	loadGameListGameDirs.Clear();
 
-	GetSaveGameList( fileList, fileTimes );
+	GetSaveGameList( fileList, fileTimes, &sourceGameDirs );
 
 	loadGameList.SetNum( fileList.Num() );
+	loadGameListGameDirs.SetNum( fileList.Num() );
 	for ( i = 0; i < fileList.Num(); i++ ) {
-		loadGameList[i] = fileList[fileTimes[i].index];
+		const int fileIndex = fileTimes[ i ].index;
+		const char *gameDir = ( fileIndex >= 0 && fileIndex < sourceGameDirs.Num() ) ? sourceGameDirs[ fileIndex ].c_str() : NULL;
+		idStr name;
+		idStr unusedDescription;
+		idStr unusedScreenshot;
 
-		idLexer src(LEXFL_NOERRORS|LEXFL_NOSTRINGCONCAT);
-		if ( src.LoadFile( va("savegames/%s.txt", loadGameList[i].c_str()) ) ) {
-			idToken tok;
-			src.ReadToken( &tok );
-			name = tok;
-		} else {
-			name = loadGameList[i];
+		loadGameList[ i ] = fileList[ fileIndex ];
+		loadGameListGameDirs[ i ] = ( gameDir != NULL ) ? gameDir : "";
+
+		if ( !Session_LoadSaveGameDetails( loadGameList[ i ].c_str(), gameDir, name, unusedDescription, unusedScreenshot ) ) {
+			name = loadGameList[ i ];
 		}
 
 		name += "\t";
@@ -444,7 +657,8 @@ void idSessionLocal::SetMainMenuGuiVars( void ) {
 #else
 	guiMainMenu->SetStateString( "nightmare", cvarSystem->GetCVarBool( "g_nightmare" ) ? "1" : "0" );
 #endif
-	guiMainMenu->SetStateString( "browser_levelshot", "guis/assets/loading/loading" );
+	guiMainMenu->SetStateString( "browser_levelshot", "guis/assets/loading/thumbs/nothing" );
+	Session_RefreshMainMenuAudioState( guiMainMenu );
 
 	SetMainMenuSkin();
 	// Mods Menu
@@ -458,6 +672,7 @@ void idSessionLocal::SetMainMenuGuiVars( void ) {
 	guiMainMenu->SetStateString( "driver_prompt", "0" );
 #endif
 
+	RescanMaps();
 	SetPbMenuGuiVars();
 }
 
@@ -473,7 +688,8 @@ bool idSessionLocal::HandleSaveGameMenuCommand( idCmdArgs &args, int &icmd ) {
 	if ( !idStr::Icmp( cmd, "loadGame" ) ) {
 		int choice = guiActive->State().GetInt("loadgame_sel_0");
 		if ( choice >= 0 && choice < loadGameList.Num() ) {
-			sessLocal.LoadGame( loadGameList[choice] );
+			const char *gameDir = ( choice < loadGameListGameDirs.Num() ) ? loadGameListGameDirs[ choice ].c_str() : NULL;
+			sessLocal.LoadGame( loadGameList[choice], gameDir );
 		}
 		return true;
 	}
@@ -529,9 +745,10 @@ bool idSessionLocal::HandleSaveGameMenuCommand( idCmdArgs &args, int &icmd ) {
 	if ( !idStr::Icmp( cmd, "deleteGame" ) ) {
 		int choice = guiActive->State().GetInt( "loadgame_sel_0" );
 		if ( choice >= 0 && choice < loadGameList.Num() ) {
-			fileSystem->RemoveFile( va("savegames/%s.save", loadGameList[choice].c_str()) );
-			fileSystem->RemoveFile( va("savegames/%s.tga", loadGameList[choice].c_str()) );
-			fileSystem->RemoveFile( va("savegames/%s.txt", loadGameList[choice].c_str()) );
+			const char *gameDir = ( choice < loadGameListGameDirs.Num() ) ? loadGameListGameDirs[ choice ].c_str() : NULL;
+			Session_RemoveSaveGameFile( loadGameList[ choice ].c_str(), gameDir, ".save" );
+			Session_RemoveSaveGameFile( loadGameList[ choice ].c_str(), gameDir, ".tga" );
+			Session_RemoveSaveGameFile( loadGameList[ choice ].c_str(), gameDir, ".txt" );
 			SetSaveGameGuiVars( );
 			guiActive->StateChanged( com_frameTime );
 		}
@@ -542,22 +759,10 @@ bool idSessionLocal::HandleSaveGameMenuCommand( idCmdArgs &args, int &icmd ) {
 		int choice = guiActive->State().GetInt( "loadgame_sel_0" );
 		if ( choice >= 0 && choice < loadGameList.Num() ) {
 			const idMaterial *material;
+			const char *gameDir = ( choice < loadGameListGameDirs.Num() ) ? loadGameListGameDirs[ choice ].c_str() : NULL;
 
 			idStr saveName, description, screenshot;
-			idLexer src(LEXFL_NOERRORS|LEXFL_NOSTRINGCONCAT);
-			if ( src.LoadFile( va("savegames/%s.txt", loadGameList[choice].c_str()) ) ) {
-				idToken tok;
-
-				src.ReadToken( &tok );
-				saveName = tok;
-
-				src.ReadToken( &tok );
-				description = tok;
-
-				src.ReadToken( &tok );
-				screenshot = tok;
-
-			} else {
+			if ( !Session_LoadSaveGameDetails( loadGameList[ choice ].c_str(), gameDir, saveName, description, screenshot ) ) {
 				saveName = loadGameList[choice];
 				description = loadGameList[choice];
 				screenshot = "";
@@ -575,8 +780,7 @@ bool idSessionLocal::HandleSaveGameMenuCommand( idCmdArgs &args, int &icmd ) {
 			guiActive->SetStateString( "saveGameName", saveName );
 			guiActive->SetStateString( "saveGameDescription", description );
 
-			ID_TIME_T timeStamp;
-			fileSystem->ReadFile( va("savegames/%s.save", loadGameList[choice].c_str()), NULL, &timeStamp );
+			const ID_TIME_T timeStamp = Session_GetSaveGameTimestamp( loadGameList[ choice ].c_str(), gameDir );
 			idStr date = Sys_TimeStampToStr(timeStamp);
 			int tab = date.Find( '\t' );
 			idStr time = date.Right( date.Length() - tab - 1);
@@ -615,6 +819,22 @@ void idSessionLocal::HandleRestartMenuCommands( const char *menuCommand ) {
 				// If we can't load the autosave then just restart the map
 				MoveToNewMap( mapSpawnData.serverInfo.GetString("si_map") );
 			}
+			continue;
+		}
+
+		if ( !idStr::Icmp( cmd, "loadlastsave" ) ) {
+			const char *gameDir = ( loadGameListGameDirs.Num() > 0 ) ? loadGameListGameDirs[ 0 ].c_str() : NULL;
+			if ( loadGameList.Num() > 0 && LoadGame( loadGameList[ 0 ], gameDir ) ) {
+				continue;
+			}
+
+			MoveToNewMap( mapSpawnData.serverInfo.GetString( "si_map" ) );
+			continue;
+		}
+
+		if ( !idStr::Icmp( cmd, "mainmenu" ) ) {
+			SetGUI( guiMainMenu, NULL );
+			guiMainMenu->HandleNamedEvent( "noIntro" );
 			continue;
 		}
 
@@ -685,6 +905,48 @@ void idSessionLocal::UpdateMPLevelShot( void ) {
 
 /*
 ==============
+idSessionLocal::RescanMaps
+==============
+*/
+void idSessionLocal::RescanMaps( void ) {
+	const char *gametype = cvarSystem->GetCVarString( "si_gameType" );
+	if ( gametype == NULL || *gametype == 0 || idStr::Icmp( gametype, "singleplayer" ) == 0 ) {
+		gametype = "Deathmatch";
+	}
+
+	idStr si_map = cvarSystem->GetCVarString( "si_map" );
+	const idDict *dict = NULL;
+
+	guiMainMenu_MapList->Clear();
+	guiMainMenu_MapList->SetSelection( 0 );
+
+	const int numMaps = fileSystem->GetNumMaps();
+	for ( int i = 0; i < numMaps; i++ ) {
+		dict = fileSystem->GetMapDecl( i );
+		if ( dict == NULL || !dict->GetBool( gametype ) ) {
+			continue;
+		}
+
+		const char *mapName = dict->GetString( "name" );
+		if ( mapName[ 0 ] == '\0' ) {
+			mapName = dict->GetString( "path" );
+		}
+		mapName = common->GetLanguageDict()->GetString( mapName );
+		guiMainMenu_MapList->Add( i, mapName );
+		if ( !si_map.Icmp( dict->GetString( "path" ) ) ) {
+			guiMainMenu_MapList->SetSelection( guiMainMenu_MapList->Num() - 1 );
+		}
+	}
+
+	const int mapNum = guiMainMenu_MapList->GetSelection( NULL, 0 );
+	dict = ( mapNum >= 0 ) ? fileSystem->GetMapDecl( mapNum ) : NULL;
+	cvarSystem->SetCVarString( "si_map", ( dict != NULL ) ? dict->GetString( "path" ) : "" );
+
+	UpdateMPLevelShot();
+}
+
+/*
+==============
 idSessionLocal::HandleMainMenuCommands
 
 Executes any commands returned by the gui
@@ -701,6 +963,18 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 		const char *cmd = args.Argv( icmd++ );
 
 		if ( HandleSaveGameMenuCommand( args, icmd ) ) {
+			continue;
+		}
+
+		if ( !idStr::Icmp( cmd, "modelscan" ) ) {
+			Session_ScanPlayerModels( guiActive ? guiActive : guiMainMenu, com_frameTime );
+			continue;
+		}
+
+		if ( !idStr::Icmp( cmd, "click_modelList" ) ) {
+			if ( icmd < args.Argc() && idStr::Icmp( args.Argv( icmd ), ";" ) != 0 ) {
+				Session_SelectPlayerModel( guiActive ? guiActive : guiMainMenu, com_frameTime, atoi( args.Argv( icmd++ ) ) );
+			}
 			continue;
 		}
 
@@ -810,88 +1084,17 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 		}
 
 		if ( !idStr::Icmp( cmd, "MAPScan" ) || !idStr::Icmp( cmd, "initCreateServerSettings" ) ) {
-			const char *gametype = cvarSystem->GetCVarString( "si_gameType" );
-			if ( gametype == NULL || *gametype == 0 || idStr::Icmp( gametype, "singleplayer" ) == 0 ) {
-				gametype = "DM";
-			}
-
-			int i, num;
-			int numMapsAdded = 0;
-			int selectedIndex = -1;
-			idStr si_map = cvarSystem->GetCVarString( "si_map" );
-			const idDict *dict = NULL;
-
-			num = fileSystem->GetNumMaps();
-			for ( i = 0; i < num; i++ ) {
-				dict = fileSystem->GetMapDecl( i );
-				if ( !MapSupportsStartServerGameType( dict, gametype ) ) {
-					continue;
-				}
-
-				const char *mapName = dict->GetString( "name" );
-				if ( mapName[ 0 ] == '\0' ) {
-					mapName = dict->GetString( "path" );
-				}
-				mapName = common->GetLanguageDict()->GetString( mapName );
-				const idStr displayName = va( "\t%s", mapName );
-				guiMainMenu->SetStateString( va( "mapList_item_%d", numMapsAdded ), displayName );
-				guiMainMenu->SetStateInt( va( "mapList_item_%d_id", numMapsAdded ), i );
-				if ( !si_map.Icmp( dict->GetString( "path" ) ) ) {
-					selectedIndex = numMapsAdded;
-				}
-				numMapsAdded++;
-			}
-
-			// If the requested gametype has no explicit flags in current content, keep the list usable.
-			if ( numMapsAdded == 0 ) {
-				for ( i = 0; i < num; i++ ) {
-					dict = fileSystem->GetMapDecl( i );
-					if ( !MapSupportsAnyMPGameType( dict ) ) {
-						continue;
-					}
-
-					const char *mapName = dict->GetString( "name" );
-					if ( mapName[ 0 ] == '\0' ) {
-						mapName = dict->GetString( "path" );
-					}
-					mapName = common->GetLanguageDict()->GetString( mapName );
-					const idStr displayName = va( "\t%s", mapName );
-					guiMainMenu->SetStateString( va( "mapList_item_%d", numMapsAdded ), displayName );
-					guiMainMenu->SetStateInt( va( "mapList_item_%d_id", numMapsAdded ), i );
-					if ( !si_map.Icmp( dict->GetString( "path" ) ) ) {
-						selectedIndex = numMapsAdded;
-					}
-					numMapsAdded++;
-				}
-			}
-
-			guiMainMenu->DeleteStateVar( va( "mapList_item_%d", numMapsAdded ) );
-			guiMainMenu->DeleteStateVar( va( "mapList_item_%d_id", numMapsAdded ) );
-
-			if ( numMapsAdded > 0 ) {
-				if ( selectedIndex < 0 ) {
-					selectedIndex = 0;
-				}
-				guiMainMenu->SetStateInt( "mapList_sel_0", selectedIndex );
-				int mapNum = guiMainMenu->State().GetInt( va( "mapList_item_%d_id", selectedIndex ) );
-				dict = fileSystem->GetMapDecl( mapNum );
-			} else {
-				guiMainMenu->SetStateInt( "mapList_sel_0", -1 );
-				dict = NULL;
-			}
-			cvarSystem->SetCVarString( "si_map", ( dict ? dict->GetString( "path" ) : "" ) );
-			guiMainMenu->SetStateInt( "mapList_num", numMapsAdded );
-
-			// set the current level shot
-			UpdateMPLevelShot();
-			guiMainMenu->StateChanged( com_frameTime );
+			RescanMaps();
 			continue;
 		}
 
 		if ( !idStr::Icmp( cmd, "click_mapList" ) ) {
-			CommitStartServerMapSelection( guiMainMenu );
+			const int mapNum = guiMainMenu_MapList->GetSelection( NULL, 0 );
+			const idDict *dict = ( mapNum >= 0 ) ? fileSystem->GetMapDecl( mapNum ) : NULL;
+			if ( dict != NULL ) {
+				cvarSystem->SetCVarString( "si_map", dict->GetString( "path" ) );
+			}
 			UpdateMPLevelShot();
-			guiMainMenu->StateChanged( com_frameTime );
 			continue;
 		}
 
@@ -908,7 +1111,11 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 		}
 
 		if ( !idStr::Icmp( cmd, "startMultiplayer" ) ) {
-			CommitStartServerMapSelection( guiMainMenu );
+			const int mapNum = guiMainMenu_MapList->GetSelection( NULL, 0 );
+			const idDict *dict = ( mapNum >= 0 ) ? fileSystem->GetMapDecl( mapNum ) : NULL;
+			if ( dict != NULL ) {
+				cvarSystem->SetCVarString( "si_map", dict->GetString( "path" ) );
+			}
 			int dedicated = guiActive->State().GetInt( "dedicated" );
 			cvarSystem->SetCVarBool( "net_LANServer", guiActive->State().GetBool( "server_type" ) );
 			if ( gui_configServerRate.GetInteger() > 0 ) {
@@ -924,33 +1131,28 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 					int maxclients = 0;
 					switch ( gui_configServerRate.GetInteger() ) {
 						case 1:
-							// 128 kbits
-							cvarSystem->SetCVarInteger( "net_serverMaxClientRate", 8000 );
+							cvarSystem->SetCVarInteger( "net_serverMaxClientRate", 12000 );
 							maxclients = 2;
 							break;
 						case 2:
-							// 256 kbits
-							cvarSystem->SetCVarInteger( "net_serverMaxClientRate", 9500 );
+							cvarSystem->SetCVarInteger( "net_serverMaxClientRate", 16000 );
 							maxclients = 3;
 							break;
 						case 3:
-							// 384 kbits
-							cvarSystem->SetCVarInteger( "net_serverMaxClientRate", 10500 );
+							cvarSystem->SetCVarInteger( "net_serverMaxClientRate", 24000 );
 							maxclients = 4;
 							break;
 						case 4:
-							// highest internet preset: treat as modern high-bandwidth connection
-							cvarSystem->SetCVarInteger( "net_serverMaxClientRate", 25600 );
-							maxclients = 16;
+							cvarSystem->SetCVarInteger( "net_serverMaxClientRate", 32000 );
+							maxclients = LISTEN_SERVER_MAX_PLAYERS;
 							break;
 						default:
-							// unknown preset: fall back to modern defaults
-							cvarSystem->SetCVarInteger( "net_serverMaxClientRate", 16000 );
-							maxclients = 16;
+							cvarSystem->SetCVarInteger( "net_serverMaxClientRate", 32000 );
+							maxclients = LISTEN_SERVER_MAX_PLAYERS;
 							break;
 					}
 					if ( n_clients > maxclients ) {
-						const int adjustedMaxClients = dedicated ? maxclients : Min( 16, maxclients + 1 );
+						const int adjustedMaxClients = dedicated ? maxclients : Min( LISTEN_SERVER_MAX_PLAYERS, maxclients + 1 );
 						if ( MessageBox( MSG_OKCANCEL, va( common->GetLanguageDict()->GetString( "#str_04315" ), adjustedMaxClients ), common->GetLanguageDict()->GetString( "#str_04316" ), true, "OK" )[ 0 ] == '\0' ) {
 							continue;
 						}
@@ -965,9 +1167,9 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 
 			if ( !dedicated &&
 				!cvarSystem->GetCVarBool( "net_LANServer" ) &&
-				listenWarningLimit < 16 &&
+				listenWarningLimit < LISTEN_SERVER_MAX_PLAYERS &&
 				cvarSystem->GetCVarInteger( "si_maxPlayers" ) > listenWarningLimit ) {
-				// "Dedicated server mode is recommended for internet servers with more than 4 players. Continue in listen mode?"
+				// "Dedicated server mode is recommended for internet servers with more than %d players. Continue in listen mode?"
 				if ( !MessageBox( MSG_YESNO, va( common->GetLanguageDict()->GetString( "#str_100625" ), listenWarningLimit ), common->GetLanguageDict()->GetString ( "#str_100626" ), true, "yes" )[ 0 ] ) {
 					continue;
 				}
@@ -1053,7 +1255,23 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 			if ( args.Argc() - icmd >= 1 ) {
 				vcmd = args.Argv( icmd++ );
 			}
-			if ( !vcmd.Length() || !vcmd.Icmp( "speakers" ) ) {
+			if ( !vcmd.Length() || !vcmd.Icmp( "init" ) ) {
+				Session_RefreshMainMenuAudioState( guiActive ? guiActive : guiMainMenu );
+				continue;
+			}
+			if ( !vcmd.Icmp( "system" ) ) {
+#if defined( USE_OPENAL )
+				cvarSystem->SetCVarBool( "s_useOpenAL", true );
+#endif
+				Session_RefreshMainMenuAudioState( guiActive ? guiActive : guiMainMenu );
+				continue;
+			}
+			if ( !vcmd.Icmp( "device" ) ) {
+				cmdSystem->BufferCommandText( CMD_EXEC_NOW, "s_restart\n" );
+				Session_RefreshMainMenuAudioState( guiActive ? guiActive : guiMainMenu );
+				continue;
+			}
+			if ( !vcmd.Icmp( "speakers" ) ) {
 				int old = cvarSystem->GetCVarInteger( "s_numberOfSpeakers" );
 				cmdSystem->BufferCommandText( CMD_EXEC_NOW, "s_restart\n" );
 				if ( old != cvarSystem->GetCVarInteger( "s_numberOfSpeakers" ) ) {
@@ -1064,39 +1282,37 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 					MessageBox( MSG_OK, common->GetLanguageDict()->GetString( "#str_07230" ), common->GetLanguageDict()->GetString( "#str_04141" ), true );
 #endif
 				}
+				Session_RefreshMainMenuAudioState( guiActive ? guiActive : guiMainMenu );
+				continue;
 			}
 			if ( !vcmd.Icmp( "eax" ) ) {
-				if ( cvarSystem->GetCVarBool( "s_useEAXReverb" ) ) {
-					//int eax = soundSystem->IsEAXAvailable();
-					//switch ( eax ) {
-					//case 2:
-					//	// OpenAL subsystem load failed
-					//	MessageBox( MSG_OK, common->GetLanguageDict()->GetString( "#str_07238" ), common->GetLanguageDict()->GetString( "#str_07231" ), true );
-					//	break;
-					//case 1:
-					//	// when you restart
-					//	MessageBox( MSG_OK, common->GetLanguageDict()->GetString( "#str_04137" ), common->GetLanguageDict()->GetString( "#str_07231" ), true );
-					//	break;
-					//case -1:
-					//	cvarSystem->SetCVarBool( "s_useEAXReverb", false );
-					//	// disabled
-					//	MessageBox( MSG_OK, common->GetLanguageDict()->GetString( "#str_07233" ), common->GetLanguageDict()->GetString( "#str_07231" ), true );
-					//	break;
-					//case 0:
-					//	cvarSystem->SetCVarBool( "s_useEAXReverb", false );
-					//	// not available
-					//	MessageBox( MSG_OK, common->GetLanguageDict()->GetString( "#str_07232" ), common->GetLanguageDict()->GetString( "#str_07231" ), true );
-					//	break;
-					//}
-				} else {
-					// also turn off OpenAL so we fully go back to legacy mixer
-					cvarSystem->SetCVarBool( "s_useOpenAL", false );
-					// when you restart
-					MessageBox( MSG_OK, common->GetLanguageDict()->GetString( "#str_04137" ), common->GetLanguageDict()->GetString( "#str_07231" ), true );
+				cvarSystem->SetCVarBool( "s_useOpenAL", true );
+				cmdSystem->BufferCommandText( CMD_EXEC_NOW, "s_restart\n" );
+
+				const int eaxState = soundSystem->IsEAXAvailable();
+				switch ( eaxState ) {
+					case 2:
+						MessageBox( MSG_OK, common->GetLanguageDict()->GetString( "#str_07238" ), common->GetLanguageDict()->GetString( "#str_07231" ), true );
+						break;
+					case 1:
+						MessageBox( MSG_OK, common->GetLanguageDict()->GetString( "#str_04137" ), common->GetLanguageDict()->GetString( "#str_07231" ), true );
+						break;
+					case -1:
+						cvarSystem->SetCVarBool( "s_useEAXReverb", false );
+						MessageBox( MSG_OK, common->GetLanguageDict()->GetString( "#str_07233" ), common->GetLanguageDict()->GetString( "#str_07231" ), true );
+						break;
+					case 0:
+					default:
+						cvarSystem->SetCVarBool( "s_useEAXReverb", false );
+						MessageBox( MSG_OK, common->GetLanguageDict()->GetString( "#str_07232" ), common->GetLanguageDict()->GetString( "#str_07231" ), true );
+						break;
 				}
+				Session_RefreshMainMenuAudioState( guiActive ? guiActive : guiMainMenu );
+				continue;
 			}
-			if ( !vcmd.Icmp( "drivar" ) ) {
-				cmdSystem->BufferCommandText( CMD_EXEC_NOW, "s_restart\n" );				
+			if ( !vcmd.Icmp( "drivar" ) || !vcmd.Icmp( "driver" ) ) {
+				cmdSystem->BufferCommandText( CMD_EXEC_NOW, "s_restart\n" );
+				Session_RefreshMainMenuAudioState( guiActive ? guiActive : guiMainMenu );
 			}
 			continue;
 		}
@@ -1458,34 +1674,34 @@ const char* idSessionLocal::MessageBox( msgBoxType_t type, const char *message, 
 			guiMsg->SetStateString( "visible_right", "0" );
 			break;
 		case MSG_OK:
-			guiMsg->SetStateString( "mid", common->GetLanguageDict()->GetString( "#str_104339" ) );
+			guiMsg->SetStateString( "mid", common->GetLanguageDict()->GetString( "#str_04339" ) );
 			guiMsg->SetStateString( "visible_mid", "1" );
 			guiMsg->SetStateString( "visible_left", "0" );
 			guiMsg->SetStateString( "visible_right", "0" );
 			break;
 		case MSG_ABORT:
-			guiMsg->SetStateString( "mid", common->GetLanguageDict()->GetString( "#str_104340" ) );
+			guiMsg->SetStateString( "mid", common->GetLanguageDict()->GetString( "#str_04340" ) );
 			guiMsg->SetStateString( "visible_mid", "1" );
 			guiMsg->SetStateString( "visible_left", "0" );
 			guiMsg->SetStateString( "visible_right", "0" );
 			break;
 		case MSG_OKCANCEL:
-			guiMsg->SetStateString( "left", common->GetLanguageDict()->GetString( "#str_104339" ) );
-			guiMsg->SetStateString( "right", common->GetLanguageDict()->GetString( "#str_104340" ) );
+			guiMsg->SetStateString( "left", common->GetLanguageDict()->GetString( "#str_04339" ) );
+			guiMsg->SetStateString( "right", common->GetLanguageDict()->GetString( "#str_04340" ) );
 			guiMsg->SetStateString( "visible_mid", "0" );
 			guiMsg->SetStateString( "visible_left", "1" );
 			guiMsg->SetStateString( "visible_right", "1" );
 			break;
 		case MSG_YESNO:
-			guiMsg->SetStateString( "left", common->GetLanguageDict()->GetString( "#str_104341" ) );
-			guiMsg->SetStateString( "right", common->GetLanguageDict()->GetString( "#str_104342" ) );
+			guiMsg->SetStateString( "left", common->GetLanguageDict()->GetString( "#str_04341" ) );
+			guiMsg->SetStateString( "right", common->GetLanguageDict()->GetString( "#str_04342" ) );
 			guiMsg->SetStateString( "visible_mid", "0" );
 			guiMsg->SetStateString( "visible_left", "1" );
 			guiMsg->SetStateString( "visible_right", "1" );
 			break;
 		case MSG_PROMPT:
-			guiMsg->SetStateString( "left", common->GetLanguageDict()->GetString( "#str_104339" ) );
-			guiMsg->SetStateString( "right", common->GetLanguageDict()->GetString( "#str_104340" ) );
+			guiMsg->SetStateString( "left", common->GetLanguageDict()->GetString( "#str_04339" ) );
+			guiMsg->SetStateString( "right", common->GetLanguageDict()->GetString( "#str_04340" ) );
 			guiMsg->SetStateString( "visible_mid", "0" );
 			guiMsg->SetStateString( "visible_left", "1" );
 			guiMsg->SetStateString( "visible_right", "1" );
@@ -1493,8 +1709,8 @@ const char* idSessionLocal::MessageBox( msgBoxType_t type, const char *message, 
 			guiMsg->HandleNamedEvent( "Prompt" );
 			break;
 		case MSG_CDKEY:
-			guiMsg->SetStateString( "left", common->GetLanguageDict()->GetString( "#str_104339" ) );
-			guiMsg->SetStateString( "right", common->GetLanguageDict()->GetString( "#str_104340" ) );
+			guiMsg->SetStateString( "left", common->GetLanguageDict()->GetString( "#str_04339" ) );
+			guiMsg->SetStateString( "right", common->GetLanguageDict()->GetString( "#str_04340" ) );
 			guiMsg->SetStateString( "visible_msgbox", "0" );
 			guiMsg->SetStateString( "visible_cdkey", "1" );
 			guiMsg->SetStateString( "visible_hasxp", fileSystem->HasD3XP() ? "1" : "0" );

@@ -150,6 +150,108 @@ static void R_AutospriteDeform( drawSurf_t *surf ) {
 
 /*
 =====================
+R_CoronaDeform
+
+Prey coronas are authored as quads but rendered as view-facing billboards.
+Unlike generic sprites, the authored quad size is scaled by the corona
+expression so beam endpoints can stay compact without turning into flare fans.
+=====================
+*/
+static void R_CoronaDeform( drawSurf_t *surf ) {
+	int					i;
+	const idDrawVert	*v;
+	idVec3				mid, delta;
+	float				radius;
+	idVec3				left, up;
+	idVec3				leftDir, upDir;
+	idVec3				localViewer;
+	const srfTriangles_t *tri;
+	srfTriangles_t		*newTri;
+
+	tri = surf->geo;
+
+	if ( tri->numVerts & 3 ) {
+		common->Warning( "R_CoronaDeform: corona had odd vertex count" );
+		return;
+	}
+	if ( tri->numIndexes != ( tri->numVerts >> 2 ) * 6 ) {
+		common->Warning( "R_CoronaDeform: corona had odd index count" );
+		return;
+	}
+
+	R_GlobalVectorToLocal( surf->space->modelMatrix, tr.viewDef->renderView.viewaxis[1], leftDir );
+	R_GlobalVectorToLocal( surf->space->modelMatrix, tr.viewDef->renderView.viewaxis[2], upDir );
+	R_GlobalPointToLocal( surf->space->modelMatrix, tr.viewDef->renderView.vieworg, localViewer );
+
+	if ( tr.viewDef->isMirror ) {
+		leftDir = vec3_origin - leftDir;
+	}
+
+	newTri = (srfTriangles_t *)R_ClearedFrameAlloc( sizeof( *newTri ) );
+	newTri->numVerts = tri->numVerts;
+	newTri->numIndexes = tri->numIndexes;
+	newTri->indexes = (glIndex_t *)R_FrameAlloc( newTri->numIndexes * sizeof( newTri->indexes[0] ) );
+
+	idDrawVert *ac = (idDrawVert *)_alloca16( newTri->numVerts * sizeof( idDrawVert ) );
+
+	const float scale = 2.0f * surf->shaderRegisters[ surf->material->GetDeformRegister( 0 ) ];
+	for ( i = 0; i < tri->numVerts; i += 4 ) {
+		v = &tri->verts[i];
+
+		mid[0] = 0.25f * ( v->xyz[0] + ( v + 1 )->xyz[0] + ( v + 2 )->xyz[0] + ( v + 3 )->xyz[0] );
+		mid[1] = 0.25f * ( v->xyz[1] + ( v + 1 )->xyz[1] + ( v + 2 )->xyz[1] + ( v + 3 )->xyz[1] );
+		mid[2] = 0.25f * ( v->xyz[2] + ( v + 1 )->xyz[2] + ( v + 2 )->xyz[2] + ( v + 3 )->xyz[2] );
+
+		delta = v->xyz - mid;
+		radius = delta.Length() * scale;
+		if ( radius <= 0.0f ) {
+			radius = 1.0f;
+		}
+
+		// Keep the corona slightly in front of the impact point so it does not
+		// collapse into the contacted surface when viewed at shallow angles.
+		idVec3 toEye = localViewer - mid;
+		float eyeDist = toEye.Normalize();
+		if ( eyeDist > 0.0f ) {
+			mid += toEye * Min( radius, eyeDist );
+		}
+
+		left = leftDir * radius;
+		up = upDir * radius;
+
+		ac[i + 0].xyz = mid + left + up;
+		ac[i + 0].st[0] = 0.0f;
+		ac[i + 0].st[1] = 0.0f;
+		ac[i + 1].xyz = mid - left + up;
+		ac[i + 1].st[0] = 1.0f;
+		ac[i + 1].st[1] = 0.0f;
+		ac[i + 2].xyz = mid - left - up;
+		ac[i + 2].st[0] = 1.0f;
+		ac[i + 2].st[1] = 1.0f;
+		ac[i + 3].xyz = mid + left - up;
+		ac[i + 3].st[0] = 0.0f;
+		ac[i + 3].st[1] = 1.0f;
+
+		for ( int j = 0; j < 4; j++ ) {
+			ac[i + j].color[0] = 255;
+			ac[i + j].color[1] = 255;
+			ac[i + j].color[2] = 255;
+			ac[i + j].color[3] = 255;
+		}
+
+		newTri->indexes[ 6 * ( i >> 2 ) + 0 ] = i;
+		newTri->indexes[ 6 * ( i >> 2 ) + 1 ] = i + 1;
+		newTri->indexes[ 6 * ( i >> 2 ) + 2 ] = i + 2;
+		newTri->indexes[ 6 * ( i >> 2 ) + 3 ] = i;
+		newTri->indexes[ 6 * ( i >> 2 ) + 4 ] = i + 2;
+		newTri->indexes[ 6 * ( i >> 2 ) + 5 ] = i + 3;
+	}
+
+	R_FinishDeform( surf, newTri, ac );
+}
+
+/*
+=====================
 R_TubeDeform
 
 will pivot a rectangular quad along the center of its long axis
@@ -1045,6 +1147,9 @@ void R_DeformDrawSurf( drawSurf_t *drawSurf ) {
 		break;
 	case DFRM_FLARE:
 		R_FlareDeform( drawSurf );
+		break;
+	case DFRM_CORONA:
+		R_CoronaDeform( drawSurf );
 		break;
 	case DFRM_EXPAND:
 		R_ExpandDeform( drawSurf );

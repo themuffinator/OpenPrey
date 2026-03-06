@@ -72,8 +72,11 @@ powershell -ExecutionPolicy Bypass -File tools/build/meson_setup.ps1 install -C 
 ### Run
 
 ```powershell
-.install/OpenPrey-client_x64.exe
+Set-Location .install
+.\OpenPrey-client_x64.exe +set fs_game openprey +set fs_savepath ..\.home +set r_fullscreen 0
 ```
+
+This keeps local configs/logs under `.home/` and avoids writing runtime state back into `.install/`.
 
 ---
 
@@ -102,6 +105,10 @@ powershell -ExecutionPolicy Bypass -File tools/build/meson_setup.ps1 install -C 
 - `openprey/game_x64.dll`
 - `openprey/` is the Meson game-module subdir.
 
+Repo source tree:
+- `openprey/` is the canonical source-side runtime overlay.
+- Meson stages that overlay into `.install/openprey/` for local runs and packaging.
+
 Runtime loader behavior:
 - Uses unified Prey-style module names (`game_<arch>`, then legacy `gamex86`/`gamex64` aliases).
 
@@ -110,6 +117,7 @@ Runtime loader behavior:
 - engine executables in `.install/`
 - game modules and staged overrides in `.install/openprey/`
 - staged Prey GUI scripts/assets in `.install/openprey/guis/`
+- `.install/openprey/` is generated staging output and should not be committed
 
 ---
 

@@ -43,7 +43,8 @@ idVec4 idDeviceContext::colorWhite;
 idVec4 idDeviceContext::colorNone;
 
 
-idCVar gui_smallFontLimit( "gui_smallFontLimit", "0.30", CVAR_GUI | CVAR_ARCHIVE, "" );
+// Retail PREY.exe defaults this to 0.10 so 0.25-0.30 UI text selects the 24px raster.
+idCVar gui_smallFontLimit( "gui_smallFontLimit", "0.10", CVAR_GUI | CVAR_ARCHIVE, "" );
 idCVar gui_mediumFontLimit( "gui_mediumFontLimit", "0.60", CVAR_GUI | CVAR_ARCHIVE, "" );
 
 
@@ -67,14 +68,14 @@ int idDeviceContext::FindFont( const char *name ) {
 	fileName.Replace("fonts", va("fonts/%s", fontLang.c_str()) );
 
 	fontInfoEx_t fontInfo;
+	if ( renderSystem->RegisterFont( fileName, fontInfo ) ) {
 		int index = fonts.Append( fontInfo );
-		if ( renderSystem->RegisterFont( fileName, fonts[index] ) ){
 		idStr::Copynz( fonts[index].name, name, sizeof( fonts[index].name ) );
 		return index;
-		} else {
+	} else {
 		common->Printf( "Could not register font %s [%s]\n", name, fileName.c_str() );
 		return -1;
-}
+	}
 }
 
 void idDeviceContext::SetupFonts() {
@@ -118,8 +119,9 @@ void idDeviceContext::Init() {
 	colorWhite = idVec4(1, 1, 1, 1);
 	colorBlack = idVec4(0, 0, 0, 1);
 	colorNone = idVec4(0, 0, 0, 0);
-	cursorImages[CURSOR_ARROW] = declManager->FindMaterial("gfx/guis/guicursor_arrow");
-	cursorImages[CURSOR_HAND] = declManager->FindMaterial("gfx/guis/guicursor_hand");
+	cursorImages[CURSOR_ARROW] = declManager->FindMaterial( "guis/assets/guicursor_arrow.tga" );
+	cursorImages[CURSOR_HAND] = declManager->FindMaterial( "guis/assets/guicursor_hand.tga" );
+	cursorImages[CURSOR_MENU] = declManager->FindMaterial( "guis/assets/guicursor_menu.tga" );
 	scrollBarImages[SCROLLBAR_HBACK] = declManager->FindMaterial("gfx/guis/scrollbarh");
 	scrollBarImages[SCROLLBAR_VBACK] = declManager->FindMaterial("gfx/guis/scrollbarv");
 	scrollBarImages[SCROLLBAR_THUMB] = declManager->FindMaterial("gfx/guis/scrollbar_thumb");
@@ -129,6 +131,7 @@ void idDeviceContext::Init() {
 	scrollBarImages[SCROLLBAR_DOWN] = declManager->FindMaterial("gfx/guis/scrollbar_down");
 	cursorImages[CURSOR_ARROW]->SetSort( SS_GUI );
 	cursorImages[CURSOR_HAND]->SetSort( SS_GUI );
+	cursorImages[CURSOR_MENU]->SetSort( SS_GUI );
 	scrollBarImages[SCROLLBAR_HBACK]->SetSort( SS_GUI );
 	scrollBarImages[SCROLLBAR_VBACK]->SetSort( SS_GUI );
 	scrollBarImages[SCROLLBAR_THUMB]->SetSort( SS_GUI );
@@ -635,21 +638,14 @@ void idDeviceContext::SetCursor(int n) {
 }
 
 void idDeviceContext::DrawCursor(float *x, float *y, float size) {
-	if (*x < 0) {
-		*x = 0;
-	}
+	float minX = 0.0f;
+	float maxX = vidWidth;
+	float minY = 0.0f;
+	float maxY = vidHeight;
+	GetCursorBounds( minX, maxX, minY, maxY );
 
-	if (*x >= vidWidth) {
-		*x = vidWidth;
-	}
-
-	if (*y < 0) {
-		*y = 0;
-	}
-
-	if (*y >= vidHeight) {
-		*y = vidHeight;
-	}
+	*x = idMath::ClampFloat( minX, maxX, *x );
+	*y = idMath::ClampFloat( minY, maxY, *y );
 
 	renderSystem->SetColor(colorWhite);
 	// Keep GUI cursor state in virtual coordinates; only transform local draw coords.
@@ -840,10 +836,37 @@ void idDeviceContext::GetVirtualScreenExpansion( float width, float height, floa
 }
 
 void idDeviceContext::SetSize(float width, float height) {
-	vidWidth = VIRTUAL_WIDTH;
-	vidHeight = VIRTUAL_HEIGHT;
+	vidWidth = ( width > 0.0f ) ? width : static_cast<float>( VIRTUAL_WIDTH );
+	vidHeight = ( height > 0.0f ) ? height : static_cast<float>( VIRTUAL_HEIGHT );
 
 	CalcVirtualScaleOffset( width, height, xScale, yScale, xOffset, yOffset );
+}
+
+void idDeviceContext::GetCursorBounds( float &minX, float &maxX, float &minY, float &maxY ) const {
+	minX = 0.0f;
+	maxX = vidWidth;
+	minY = 0.0f;
+	maxY = vidHeight;
+
+	if ( xScale != 0.0f ) {
+		minX = ( 0.0f - xOffset ) / xScale;
+		maxX = ( vidWidth - xOffset ) / xScale;
+		if ( minX > maxX ) {
+			const float tmp = minX;
+			minX = maxX;
+			maxX = tmp;
+		}
+	}
+
+	if ( yScale != 0.0f ) {
+		minY = ( 0.0f - yOffset ) / yScale;
+		maxY = ( vidHeight - yOffset ) / yScale;
+		if ( minY > maxY ) {
+			const float tmp = minY;
+			minY = maxY;
+			maxY = tmp;
+		}
+	}
 }
 
 int idDeviceContext::CharWidth( const char c, float scale ) {

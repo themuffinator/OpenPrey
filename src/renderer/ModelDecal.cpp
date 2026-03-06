@@ -409,7 +409,7 @@ idRenderModelDecal *idRenderModelDecal::RemoveFadedDecals( idRenderModelDecal *d
 	}
 	
 	decalInfo = decals->material->GetDecalInfo();
-	minTime = time - decalInfo.stayTime;
+	minTime = time - ( decalInfo.stayTime + decalInfo.fadeTime );
 
 	newNumIndexes = 0;
 	for ( i = 0; i < decals->tri.numIndexes; i += 3 ) {
@@ -470,7 +470,9 @@ void idRenderModelDecal::AddDecalDrawSurf( viewEntity_t *space ) {
 	}
 
 	const decalInfo_t decalInfo = material->GetDecalInfo();
-	const int stayTime = ( decalInfo.stayTime > 0 ) ? decalInfo.stayTime : 1;
+	const int stayTime = Max( decalInfo.stayTime, 0 );
+	const int fadeTime = Max( decalInfo.fadeTime, 0 );
+	const int maxTime = Max( stayTime + fadeTime, 1 );
 	const int numStages = material->GetNumStages();
 	vertCache_s *decalColorCache = NULL;
 	int decalColorStride = 0;
@@ -493,7 +495,14 @@ void idRenderModelDecal::AddDecalDrawSurf( viewEntity_t *space ) {
 		shaderParms[SHADERPARM_BRIGHTNESS] = 1.0f;
 
 		for ( int v = 0; v < tri.numVerts; v++ ) {
-			float life = (float)( tr.viewDef->renderView.time - vertStartTime[v] ) / (float)stayTime;
+			const float deltaTime = (float)tr.viewDef->renderView.time - vertStartTime[v];
+			float fadeFraction = 0.0f;
+			if ( fadeTime > 0 && deltaTime > stayTime ) {
+				fadeFraction = ( deltaTime - stayTime ) / (float)fadeTime;
+			}
+			fadeFraction = idMath::ClampFloat( 0.0f, 1.0f, fadeFraction );
+
+			float life = deltaTime / (float)maxTime;
 			life = idMath::ClampFloat( 0.0f, 1.0f, life );
 			shaderParms[4] = life;
 			shaderParms[5] = vertStartTime[v];
@@ -505,7 +514,8 @@ void idRenderModelDecal::AddDecalDrawSurf( viewEntity_t *space ) {
 				byte *vertexColor = stageColors + stage * colorStride + v * 4;
 
 				for ( int k = 0; k < 4; k++ ) {
-					int icolor = idMath::FtoiFast( regs[pStage->color.registers[k]] * vertDepthFade[v] * 255.0f );
+					const float decalColor = decalInfo.start[k] + ( decalInfo.end[k] - decalInfo.start[k] ) * fadeFraction;
+					int icolor = idMath::FtoiFast( regs[pStage->color.registers[k]] * decalColor * vertDepthFade[v] * 255.0f );
 					if ( icolor < 0 ) {
 						icolor = 0;
 					} else if ( icolor > 255 ) {

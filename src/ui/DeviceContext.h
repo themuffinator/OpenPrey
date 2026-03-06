@@ -75,6 +75,7 @@ public:
 	void				SetSize(float width, float height);
 	void				SetAspectCorrection( bool enabled );
 	void				GetVirtualScreenExpansion( float width, float height, float &xExpand, float &yExpand ) const;
+	void				GetCursorBounds( float &minX, float &maxX, float &minY, float &maxY ) const;
 
 	const idMaterial	*GetScrollBarImage(int index);
 
@@ -101,6 +102,7 @@ public:
 	enum {
 		CURSOR_ARROW,
 		CURSOR_HAND,
+		CURSOR_MENU,
 		CURSOR_COUNT
 	};
 

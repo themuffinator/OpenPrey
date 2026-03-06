@@ -61,7 +61,10 @@ typedef enum {
 } textureRepeat_t;
 
 typedef struct {
-	int		stayTime;		// msec for full decal lifetime
+	int		stayTime;		// msec to remain at the start color
+	int		fadeTime;		// msec to fade from start to end color
+	float	start[4];		// legacy Doom 3 / Prey vertex color at spawn
+	float	end[4];			// legacy Doom 3 / Prey vertex color at fade-out
 	float	maxAngle;		// minimum face-normal dot against projection direction
 } decalInfo_t;
 
@@ -70,6 +73,7 @@ typedef enum {
 	DFRM_SPRITE,
 	DFRM_TUBE,
 	DFRM_FLARE,
+	DFRM_CORONA,
 	DFRM_EXPAND,
 	DFRM_MOVE,
 	DFRM_EYEBALL,
@@ -181,7 +185,8 @@ typedef enum {
 	SL_AMBIENT,						// execute after lighting
 	SL_BUMP,
 	SL_DIFFUSE,
-	SL_SPECULAR
+	SL_SPECULAR,
+	SL_INTERACTION					// programmable interaction rendered per-light
 } stageLighting_t;
 
 // cross-blended terrain textures need to modulate the color by
@@ -213,6 +218,7 @@ typedef struct {
 	int					fragmentProgram;
 	int					numFragmentProgramImages;
 	idImage* fragmentProgramImages[MAX_FRAGMENT_IMAGES];
+	bool				interactionProgram;
 
 	bool				glslProgram;
 	char				glslProgramName[MAX_GLSL_SHADER_NAME];

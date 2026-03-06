@@ -1672,7 +1672,7 @@ void Com_ExecMachineSpec_f( const idCmdArgs &args ) {
 		cvarSystem->SetCVarInteger( "image_useCompression", 0, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "image_ignoreHighQuality", 0, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "s_maxSoundsPerShader", 0, CVAR_ARCHIVE );
-		cvarSystem->SetCVarInteger( "r_mode", 5, CVAR_ARCHIVE );
+		cvarSystem->SetCVarInteger( "r_mode", 6, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "image_useNormalCompression", 0, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "r_multiSamples", 0, CVAR_ARCHIVE );
 	} else if ( com_machineSpec.GetInteger() == 2 ) {
@@ -1694,7 +1694,7 @@ void Com_ExecMachineSpec_f( const idCmdArgs &args ) {
 		cvarSystem->SetCVarInteger( "image_ignoreHighQuality", 0, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "s_maxSoundsPerShader", 0, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "image_useNormalCompression", 0, CVAR_ARCHIVE );
-		cvarSystem->SetCVarInteger( "r_mode", 4, CVAR_ARCHIVE );
+		cvarSystem->SetCVarInteger( "r_mode", 3, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "r_multiSamples", 0, CVAR_ARCHIVE );
 	} else if ( com_machineSpec.GetInteger() == 1 ) {
 		cvarSystem->SetCVarString( "image_filter", "GL_LINEAR_MIPMAP_LINEAR", CVAR_ARCHIVE );
@@ -1712,7 +1712,7 @@ void Com_ExecMachineSpec_f( const idCmdArgs &args ) {
 		cvarSystem->SetCVarInteger( "image_downSizeSpecularLimit", 64, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "image_downSizeBumpLimit", 256, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "image_useNormalCompression", 2, CVAR_ARCHIVE );
-		cvarSystem->SetCVarInteger( "r_mode", 3, CVAR_ARCHIVE );
+		cvarSystem->SetCVarInteger( "r_mode", 2, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "r_multiSamples", 0, CVAR_ARCHIVE );
 	} else {
 		cvarSystem->SetCVarString( "image_filter", "GL_LINEAR_MIPMAP_LINEAR", CVAR_ARCHIVE );
@@ -1731,12 +1731,12 @@ void Com_ExecMachineSpec_f( const idCmdArgs &args ) {
 		cvarSystem->SetCVarInteger( "image_downSizeBump", 1, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "image_downSizeSpecularLimit", 64, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "image_downSizeBumpLimit", 256, CVAR_ARCHIVE );
-		cvarSystem->SetCVarInteger( "r_mode", 3	, CVAR_ARCHIVE );
+		cvarSystem->SetCVarInteger( "r_mode", 0, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "image_useNormalCompression", 2, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "r_multiSamples", 0, CVAR_ARCHIVE );
 	}
 
-	if ( Sys_GetVideoRam() < 128 ) {
+	if ( Sys_GetVideoRam() < 2048 ) {
 		cvarSystem->SetCVarBool( "image_ignoreHighQuality", true, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "image_downSize", 1, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "image_downSizeLimit", 256, CVAR_ARCHIVE );
@@ -1746,7 +1746,7 @@ void Com_ExecMachineSpec_f( const idCmdArgs &args ) {
 		cvarSystem->SetCVarInteger( "image_downSizeBumpLimit", 256, CVAR_ARCHIVE );
 	}
 
-	if ( Sys_GetSystemRam() < 512 ) {
+	if ( Sys_GetSystemRam() < 4096 ) {
 		cvarSystem->SetCVarBool( "image_ignoreHighQuality", true, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "s_maxSoundsPerShader", 1, CVAR_ARCHIVE );
 		cvarSystem->SetCVarInteger( "image_downSize", 1, CVAR_ARCHIVE );
@@ -1886,6 +1886,14 @@ void idCommonLocal::InitLanguageDict( void ) {
 		langName = cvarSystem->GetCVarString( "sys_lang" );
 		currentLangList = langList;
 		FilterLangList(&currentLangList, langName);
+	}
+
+	if ( idStr::Icmp( langName, "english" ) != 0 ) {
+		idStrList englishLangList = langList;
+		FilterLangList( &englishLangList, "english" );
+		for ( int i = 0; i < englishLangList.Num(); i++ ) {
+			languageDict.Load( englishLangList[ i ], false );
+		}
 	}
 
 	for( int i = 0; i < currentLangList.Num(); i++ ) {
@@ -3359,7 +3367,6 @@ idCommonLocal::SetMachineSpec
 =================
 */
 void idCommonLocal::SetMachineSpec( void ) {
-	cpuid_t	cpu = Sys_GetProcessorId();
 	double ghz = Sys_ClockTicksPerSecond() * 0.000000001f;
 	int vidRam = Sys_GetVideoRam();
 	int sysRam = Sys_GetSystemRam();
@@ -3370,13 +3377,13 @@ void idCommonLocal::SetMachineSpec( void ) {
 
 	Printf( "Detected\n \t%.2f GHz CPU\n\t%i MB of System memory\n\t%i MB of Video memory on %s\n\n", ghz, sysRam, vidRam, ( oldCard ) ? "a less than optimal video architecture" : "an optimal video architecture" );
 
-	if ( ghz >= 2.75f && vidRam >= 512 && sysRam >= 1024 && !oldCard ) {
+	if ( ghz >= 2.5f && vidRam >= 6144 && sysRam >= 16384 && !oldCard ) {
 		Printf( "This system qualifies for Ultra quality!\n" );
 		com_machineSpec.SetInteger( 3 );
-	} else if ( ghz >= ( ( cpu & CPUID_AMD ) ? 1.9f : 2.19f ) && vidRam >= 256 && sysRam >= 512 && !oldCard ) {
+	} else if ( ghz >= 2.0f && vidRam >= 3072 && sysRam >= 8192 && !oldCard ) {
 		Printf( "This system qualifies for High quality!\n" );
 		com_machineSpec.SetInteger( 2 );
-	} else if ( ghz >= ( ( cpu & CPUID_AMD ) ? 1.1f : 1.25f ) && vidRam >= 128 && sysRam >= 384 ) {
+	} else if ( ghz >= 1.6f && vidRam >= 1536 && sysRam >= 4096 ) {
 		Printf( "This system qualifies for Medium quality.\n" );
 		com_machineSpec.SetInteger( 1 );
 	} else {

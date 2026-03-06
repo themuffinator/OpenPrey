@@ -115,6 +115,11 @@ static void R_BlackImage( idImage *image ) {
 
 	// solid black texture
 	memset( data, 0, sizeof( data ) );
+	for ( int y = 0; y < DEFAULT_SIZE; y++ ) {
+		for ( int x = 0; x < DEFAULT_SIZE; x++ ) {
+			data[y][x][3] = 255;
+		}
+	}
 	image->GenerateImage( (byte *)data, DEFAULT_SIZE, DEFAULT_SIZE, 
 		TF_DEFAULT, TR_REPEAT, TD_DEFAULT );
 }
@@ -658,6 +663,8 @@ void idImageManager::CreateIntrinsicImages() {
 	scratchImage = ImageFromFunction("_scratch", R_RGBA8Image);
 	scratchImage2 = ImageFromFunction("_scratch2", R_RGBA8Image);
 	accumImage = ImageFromFunction("_accum", R_RGBA8Image);
+	glowScreenImage = ImageFromFunction("_glowScreen", R_RGBA8Image);
+	glowCompositeImage = ImageFromFunction("_glowComposite", R_RGBA8Image);
 	//scratchCubeMapImage = ImageFromFunction("_scratchCubeMap", makeNormalizeVectorCubeMap);
 
 	currentRenderImage = ImageFromFunction("_currentRender", R_RGBA8Image);

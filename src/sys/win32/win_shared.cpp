@@ -39,6 +39,7 @@ If you have questions concerning this license or the applicable additional terms
 #include <direct.h>
 #include <io.h>
 #include <conio.h>
+#include <dxgi.h>
 
 #ifndef	ID_DEDICATED
 #ifndef INT_MAX
@@ -136,7 +137,61 @@ returns in megabytes
 ================
 */
 int Sys_GetVideoRam(void) {
-	return 100 * 1024 * 1024;
+	typedef HRESULT ( WINAPI *createDxgiFactory_t )( REFIID, void** );
+
+	HMODULE dxgiModule = LoadLibraryA( "dxgi.dll" );
+	if ( dxgiModule != NULL ) {
+		createDxgiFactory_t createFactory = reinterpret_cast<createDxgiFactory_t>( GetProcAddress( dxgiModule, "CreateDXGIFactory" ) );
+		if ( createFactory != NULL ) {
+			IDXGIFactory *factory = NULL;
+			if ( SUCCEEDED( createFactory( __uuidof( IDXGIFactory ), reinterpret_cast<void **>( &factory ) ) ) && factory != NULL ) {
+				SIZE_T bestVideoMemory = 0;
+
+				for ( UINT adapterIndex = 0; ; adapterIndex++ ) {
+					IDXGIAdapter *adapter = NULL;
+					const HRESULT result = factory->EnumAdapters( adapterIndex, &adapter );
+					if ( result == DXGI_ERROR_NOT_FOUND ) {
+						break;
+					}
+					if ( FAILED( result ) || adapter == NULL ) {
+						continue;
+					}
+
+					DXGI_ADAPTER_DESC adapterDesc;
+					memset( &adapterDesc, 0, sizeof( adapterDesc ) );
+					if ( SUCCEEDED( adapter->GetDesc( &adapterDesc ) ) ) {
+						SIZE_T adapterMemory = adapterDesc.DedicatedVideoMemory;
+						if ( adapterMemory == 0 ) {
+							adapterMemory = adapterDesc.DedicatedSystemMemory;
+						}
+						if ( adapterMemory == 0 && adapterDesc.SharedSystemMemory > 0 ) {
+							adapterMemory = adapterDesc.SharedSystemMemory / 4;
+							const SIZE_T sharedMemoryCap = static_cast<SIZE_T>( 2ULL * 1024ULL * 1024ULL * 1024ULL );
+							if ( adapterMemory > sharedMemoryCap ) {
+								adapterMemory = sharedMemoryCap;
+							}
+						}
+						if ( adapterMemory > bestVideoMemory ) {
+							bestVideoMemory = adapterMemory;
+						}
+					}
+
+					adapter->Release();
+				}
+
+				factory->Release();
+
+				if ( bestVideoMemory > 0 ) {
+					FreeLibrary( dxgiModule );
+					return static_cast<int>( ( bestVideoMemory + ( 1024 * 1024 - 1 ) ) / ( 1024 * 1024 ) );
+				}
+			}
+		}
+
+		FreeLibrary( dxgiModule );
+	}
+
+	return 1024;
 }
 
 /*

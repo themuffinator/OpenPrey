@@ -62,6 +62,7 @@ private:
 	virtual bool		ParseInternalVar(const char *name, idParser *src);
 	void				CommonInit();
 	void				InitCvar();
+	void				UpdateThumbMetrics( const idRectangle &sliderRect );
 						// true: read the updated cvar from cvar system
 						// false: write to the cvar system
 						// force == true overrides liveUpdate 0
@@ -78,6 +79,7 @@ private:
 	const idMaterial *	thumbMat;
 	bool				vertical;
 	bool				verticalFlip;
+	bool				volumeSlider;
 	bool				scrollbar;
 	idWindow *			buddyWin;
 	idStr				thumbShader;
