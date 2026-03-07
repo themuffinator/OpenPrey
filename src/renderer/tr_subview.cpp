@@ -157,8 +157,11 @@ static viewDef_t *R_PortalSubviewBySurface( drawSurf_t *drawSurf ) {
 
 	const renderEntity_t &portalEntity = drawSurf->space->entityDef->parms;
 	const int index = drawSurf->material->GetDirectPortalDistance();
-	if ( index >= 0 && index < EXP_REG_NUM_PREDEFINED ) {
-		const int maxPortalDistanceLimit = idMath::FtoiFast( drawSurf->space->entityDef->parms.shaderParms[index] );
+	if ( index >= 0 && index < drawSurf->material->GetNumRegisters() && drawSurf->shaderRegisters != NULL ) {
+		const int maxPortalDistanceLimit = idMath::FtoiFast( drawSurf->shaderRegisters[index] );
+		if ( maxPortalDistanceLimit < 0 ) {
+			return NULL;
+		}
 		if ( maxPortalDistanceLimit > 0 &&
 			( tr.viewDef->renderView.vieworg - portalEntity.origin ).LengthSqr() > Square( maxPortalDistanceLimit ) ) {
 			return NULL;

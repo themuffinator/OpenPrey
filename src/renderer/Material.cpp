@@ -3086,11 +3086,6 @@ bool idMaterial::Parse( const char *text, const int textLength ) {
 		}
 	}
 
-	// Match Quake 4: distance-cull portal settings implicitly use a black fade image.
-	if ( ( portalDistanceNear < 262144.0f || portalDistanceFar < 262144.0f ) && !portalImage ) {
-		portalImage = globalImages->blackImage;
-	}
-
 	// add a tiny offset to the sort orders, so that different materials
 	// that have the same sort value will at least sort consistantly, instead
 	// of flickering back and forth
