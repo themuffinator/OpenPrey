@@ -200,7 +200,7 @@ static void Session_DrawScaledSmallString( float x, float y, float charWidth, fl
 }
 
 static void Session_DrawFallbackLoadingScreen() {
-	static const idVec4 loadingTextColor( 0.94f, 0.62f, 0.05f, 1.0f );
+	static const idVec4 loadingTextColor( 0.5273f, 0.6094f, 0.8125f, 1.0f );
 
 	const float virtualWidth = static_cast<float>( SCREEN_WIDTH );
 	const float virtualHeight = static_cast<float>( SCREEN_HEIGHT );

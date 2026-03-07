@@ -44,6 +44,7 @@ typedef enum {
 static interactionColorMode_t g_interactionVertexProgramAutoColorMode = ICM_PACKED;
 static interactionColorMode_t g_interactionVertexProgramColorMode = ICM_PACKED;
 static int g_interactionVertexProgramOverride = 0;
+static const GLuint FP_INTERACTION_ALPHA_TEST = 7;
 
 static const char *RB_InteractionColorModeName( interactionColorMode_t mode ) {
 	switch ( mode ) {
@@ -255,6 +256,13 @@ void	RB_ARB2_DrawInteraction( const drawInteraction_t *din ) {
 	// set the constant colors
 	glProgramEnvParameter4fvARB( GL_FRAGMENT_PROGRAM_ARB, 0, din->diffuseColor.ToFloatPtr() );
 	glProgramEnvParameter4fvARB( GL_FRAGMENT_PROGRAM_ARB, 1, din->specularColor.ToFloatPtr() );
+	const float alphaThreshold[4] = {
+		din->alphaTestThreshold,
+		din->alphaTestThreshold,
+		din->alphaTestThreshold,
+		din->alphaTestThreshold
+	};
+	glProgramEnvParameter4fvARB( GL_FRAGMENT_PROGRAM_ARB, FP_INTERACTION_ALPHA_TEST, alphaThreshold );
 
 	// set the textures
 

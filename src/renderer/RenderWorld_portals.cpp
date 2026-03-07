@@ -64,7 +64,6 @@ static ID_INLINE int R_EffectiveViewIDForSubview() {
 	return ( tr.viewDef != NULL ) ? tr.viewDef->renderView.viewID : 0;
 }
 
-
 //====================================================================
 
 
@@ -616,6 +615,16 @@ void idRenderWorldLocal::AddAreaEntityRefs( int areaNum, const portalStack_t *ps
 
 		// remove decals that are completely faded away
 		R_FreeEntityDefFadedDecals( entity, tr.viewDef->renderView.time );
+
+		if ( tr.viewDef->renderView.viewSpiritEntities ) {
+			if ( entity->parms.onlyInvisibleInSpirit ) {
+				continue;
+			}
+		} else {
+			if ( entity->parms.onlyVisibleInSpirit ) {
+				continue;
+			}
+		}
 
 		// check for completely suppressing the model
 		if ( !r_skipSuppress.GetBool() ) {

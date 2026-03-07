@@ -764,6 +764,8 @@ void idWindow::CommonInit() {
 	timeLine = -1;
 	textShadow = 0;
 	hover = false;
+	retailCreditArmed = false;
+	retailTextEffectStartTime = -1;
 
 	for (int i = 0; i < SCRIPT_COUNT; i++) {
 		scripts[i] = NULL;
@@ -961,6 +963,216 @@ float idWindow::GetMaxCharWidth() {
 
 /*
 ================
+idWindow::CreateRetailGuiVar
+================
+*/
+idWinVar *idWindow::CreateRetailGuiVar( const char *name ) {
+	if ( name == NULL ) {
+		return NULL;
+	}
+
+	idWinVar *var = NULL;
+	if ( idStr::Icmp( name, "onstart" ) == 0 ||
+		idStr::Icmp( name, "oncallenable" ) == 0 ||
+		idStr::Icmp( name, "oncalldisable" ) == 0 ||
+		idStr::Icmp( name, "oncallreset" ) == 0 ) {
+		var = new idWinBool();
+		var->Set( "0" );
+	} else if ( idStr::Icmp( name, "splinein" ) == 0 ) {
+		var = new idWinBool();
+		var->Set( "1" );
+	} else if ( idStr::Icmp( name, "duration" ) == 0 ||
+		idStr::Icmp( name, "trailoffset" ) == 0 ) {
+		var = new idWinFloat();
+		var->Set( idStr::Icmp( name, "duration" ) == 0 ? "1000" : "0.01" );
+	} else if ( idStr::Icmp( name, "splinepoints" ) == 0 ||
+		idStr::Icmp( name, "trails" ) == 0 ) {
+		var = new idWinInt();
+		var->Set( idStr::Icmp( name, "splinepoints" ) == 0 ? "5" : "10" );
+	}
+
+	if ( var != NULL ) {
+		var->SetName( name );
+		AddDefinedVar( var );
+	}
+
+	return var;
+}
+
+/*
+================
+idWindow::FindDefinedVarByNameNoCreate
+================
+*/
+idWinVar *idWindow::FindDefinedVarByNameNoCreate( const char *name ) {
+	if ( name == NULL ) {
+		return NULL;
+	}
+
+	const int count = definedVars.Num();
+	for ( int i = 0; i < count; ++i ) {
+		if ( definedVars[ i ] != NULL && idStr::Icmp( definedVars[ i ]->GetName(), name ) == 0 ) {
+			return definedVars[ i ];
+		}
+	}
+
+	return NULL;
+}
+
+/*
+================
+idWindow::GetWinVarIntValue
+================
+*/
+int idWindow::GetWinVarIntValue( const char *name, int defaultValue ) {
+	idWinVar *var = GetWinVarByName( name, false );
+	return ( var != NULL ) ? atoi( var->c_str() ) : defaultValue;
+}
+
+/*
+================
+idWindow::GetWinVarFloatValue
+================
+*/
+float idWindow::GetWinVarFloatValue( const char *name, float defaultValue ) {
+	idWinVar *var = GetWinVarByName( name, false );
+	return ( var != NULL ) ? static_cast<float>( atof( var->c_str() ) ) : defaultValue;
+}
+
+/*
+================
+idWindow::HandleRetailSpecialVars
+================
+*/
+void idWindow::HandleRetailSpecialVars() {
+	idWindow *eventTarget = this;
+	if ( gui != NULL && gui->GetDesktop() != NULL ) {
+		eventTarget = gui->GetDesktop();
+	}
+
+	idWinBool *onCallEnableVar = dynamic_cast<idWinBool *>( FindDefinedVarByNameNoCreate( "onCallEnable" ) );
+	if ( onCallEnableVar != NULL && *onCallEnableVar ) {
+		*onCallEnableVar = false;
+		eventTarget->RunNamedEvent( "Enable" );
+	}
+
+	idWinBool *onCallDisableVar = dynamic_cast<idWinBool *>( FindDefinedVarByNameNoCreate( "onCallDisable" ) );
+	if ( onCallDisableVar != NULL && *onCallDisableVar ) {
+		*onCallDisableVar = false;
+		eventTarget->RunNamedEvent( "Disable" );
+	}
+
+	idWinBool *onCallResetVar = dynamic_cast<idWinBool *>( FindDefinedVarByNameNoCreate( "onCallReset" ) );
+	if ( onCallResetVar != NULL && *onCallResetVar ) {
+		*onCallResetVar = false;
+		eventTarget->RunNamedEvent( "Reset" );
+	}
+
+	idWinBool *onStartVar = dynamic_cast<idWinBool *>( FindDefinedVarByNameNoCreate( "onStart" ) );
+	if ( onStartVar != NULL && *onStartVar ) {
+		*onStartVar = false;
+		idWinBool *splineInVar = dynamic_cast<idWinBool *>( GetWinVarByName( "splineIn", false ) );
+		if ( IsRetailSplineWindow() && splineInVar != NULL && *splineInVar && gui != NULL ) {
+			retailTextEffectStartTime = gui->GetTime();
+		}
+	}
+}
+
+/*
+================
+idWindow::UpdateRetailCreditActivation
+================
+*/
+void idWindow::UpdateRetailCreditActivation() {
+	if ( !IsCreditDef() || !retailCreditArmed || gui == NULL || !noTime ) {
+		return;
+	}
+
+	if ( drawRect.y > 350.0f ) {
+		return;
+	}
+
+	ResetTime( 0 );
+	EvalRegs( -1, true );
+	Time();
+	HandleRetailSpecialVars();
+}
+
+/*
+================
+idWindow::DrawRetailTextEffect
+================
+*/
+bool idWindow::DrawRetailTextEffect( const idVec4 &color ) {
+	if ( retailTextEffectStartTime < 0 || gui == NULL || dc == NULL ) {
+		return false;
+	}
+
+	float duration = GetWinVarFloatValue( "duration", 1000.0f );
+	if ( duration <= 0.0f ) {
+		duration = 1000.0f;
+	}
+
+	const float elapsed = static_cast<float>( gui->GetTime() - retailTextEffectStartTime );
+	if ( elapsed <= 0.0f ) {
+		return true;
+	}
+
+	const int trails = idMath::ClampInt( 1, 1000, GetWinVarIntValue( "trails", 10 ) );
+	const int splinePoints = idMath::ClampInt( 3, 100, GetWinVarIntValue( "splinePoints", 5 ) );
+	const float trailOffset = idMath::ClampFloat( 0.0f, 1.0f, GetWinVarFloatValue( "trailOffset", 0.01f ) );
+	const float totalDuration = duration * ( 1.0f + trailOffset * trails );
+	if ( elapsed >= totalDuration ) {
+		retailTextEffectStartTime = -1;
+		dc->ClearRetailSplineEffect();
+		return false;
+	}
+
+	const float trailDelay = duration * trailOffset;
+
+	auto drawSample = [&]( float sampleElapsed, float alphaScale, bool drawShadow ) {
+		if ( sampleElapsed <= 0.0f ) {
+			return;
+		}
+
+		const float progress = idMath::ClampFloat( 0.0f, 1.0f, sampleElapsed / duration );
+		dc->SetRetailSplineEffect( progress, splinePoints );
+
+		if ( drawShadow && textShadow ) {
+			idStr shadowText = text;
+			idRectangle shadowRect = textRect;
+			idVec4 shadowColor = colorBlack;
+
+			shadowText.RemoveColors();
+			shadowRect.x += textShadow;
+			shadowRect.y += textShadow;
+			shadowColor[ 3 ] = color[ 3 ] * alphaScale * ( 0.35f + 0.65f * progress );
+			dc->DrawText( shadowText, textScale, textAlign, shadowColor, shadowRect, !( flags & WIN_NOWRAP ), -1 );
+		}
+
+		idVec4 drawColor = color;
+		drawColor[ 3 ] *= alphaScale * ( 0.22f + 0.78f * progress );
+		dc->DrawText( text, textScale, textAlign, drawColor, textRect, !( flags & WIN_NOWRAP ), -1 );
+		dc->ClearRetailSplineEffect();
+	};
+
+	for ( int i = trails; i > 0; --i ) {
+		const float sampleElapsed = elapsed - trailDelay * static_cast<float>( i );
+		if ( sampleElapsed <= 0.0f ) {
+			continue;
+		}
+
+		const float trailBlend = 1.0f - static_cast<float>( i - 1 ) / static_cast<float>( trails );
+		const float alphaScale = 0.06f + 0.34f * trailBlend;
+		drawSample( sampleElapsed, alphaScale, false );
+	}
+
+	drawSample( elapsed, 0.2f + 0.8f * idMath::ClampFloat( 0.0f, 1.0f, elapsed / duration ), true );
+	return true;
+}
+
+/*
+================
 idWindow::Draw
 ================
 */
@@ -982,6 +1194,10 @@ void idWindow::Draw( int time, float x, float y ) {
 	idVec4 drawTextColor = foreColor;
 	if ( parent != NULL && parent->overChild == this && !noEvents ) {
 		drawTextColor = hoverColor;
+	}
+
+	if ( DrawRetailTextEffect( drawTextColor ) ) {
+		return;
 	}
 
 	if ( textShadow ) {
@@ -1372,6 +1588,16 @@ void idWindow::RunNamedEvent ( const char* eventName )
 	c = children.Num();
 	for ( i = 0; i < c; i++ ) {
 		children[i]->RunNamedEvent ( eventName );
+	}
+
+	if ( IsCreditDef() ) {
+		if ( idStr::Icmp( eventName, "Enable" ) == 0 ) {
+			retailCreditArmed = true;
+		} else if ( idStr::Icmp( eventName, "Disable" ) == 0 ) {
+			retailCreditArmed = false;
+		} else if ( idStr::Icmp( eventName, "Reset" ) == 0 ) {
+			retailTextEffectStartTime = -1;
+		}
 	}
 }
 
@@ -2247,14 +2473,7 @@ void idWindow::Redraw(float x, float y) {
 	}
 
 	UpdateTabContainerState( true );
-
-	if (!visible) {
-		return;
-	}
-
 	CalcClientRect(0, 0);
-
-	SetFont();
 	//if (flags & WIN_DESKTOP) {
 		// see if this window forces a new aspect ratio
 		dc->SetSize(forceAspectWidth, forceAspectHeight);
@@ -2266,6 +2485,18 @@ void idWindow::Redraw(float x, float y) {
 	textRect.Offset(x, y);
 	actualX = drawRect.x;
 	actualY = drawRect.y;
+
+	HandleRetailSpecialVars();
+	UpdateRetailCreditActivation();
+
+	if ( !visible ) {
+		drawRect.Offset(-x, -y);
+		clientRect.Offset(-x, -y);
+		textRect.Offset(-x, -y);
+		return;
+	}
+
+	SetFont();
 
 	idVec3	oldOrg;
 	idMat3	oldTrans;
@@ -3115,6 +3346,11 @@ idWinVar *idWindow::GetWinVarByName(const char *_name, bool fixup, drawWin_t** o
 		return retVar;
 	}
 
+	retVar = CreateRetailGuiVar( key.c_str() );
+	if ( retVar != NULL ) {
+		return retVar;
+	}
+
 	int len = key.Length();
 	if ( len > 5 && guiVar ) {
 		idWinVar *var = new idWinStr;
@@ -3480,6 +3716,33 @@ idWindow::IsTabDef
 */
 bool idWindow::IsTabDef() const {
 	return windowDefType.Icmp( "tabDef" ) == 0;
+}
+
+/*
+================
+idWindow::IsCreditDef
+================
+*/
+bool idWindow::IsCreditDef() const {
+	return windowDefType.Icmp( "creditDef" ) == 0;
+}
+
+/*
+================
+idWindow::IsSplineDef
+================
+*/
+bool idWindow::IsSplineDef() const {
+	return windowDefType.Icmp( "splineDef" ) == 0;
+}
+
+/*
+================
+idWindow::IsRetailSplineWindow
+================
+*/
+bool idWindow::IsRetailSplineWindow() const {
+	return IsCreditDef() || IsSplineDef();
 }
 
 /*

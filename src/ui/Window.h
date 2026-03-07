@@ -415,12 +415,22 @@ protected:
 	void ConvertRegEntry(const char *name, idParser *src, idStr &out, int tabs);
 	bool IsTabContainerDef() const;
 	bool IsTabDef() const;
+	bool IsCreditDef() const;
+	bool IsSplineDef() const;
+	bool IsRetailSplineWindow() const;
+	idWinVar *CreateRetailGuiVar( const char *name );
+	idWinVar *FindDefinedVarByNameNoCreate( const char *name );
 	int GetTabContainerTabCount() const;
 	idWindow *GetTabContainerTabWindow( int tabIndex ) const;
 	int GetTabContainerRequestedTabIndex() const;
 	int GetTabContainerTabAt( float x, float y ) const;
 	void UpdateTabContainerState( bool runActivateScript );
 	void DrawTabContainerTabs();
+	void HandleRetailSpecialVars();
+	int GetWinVarIntValue( const char *name, int defaultValue );
+	float GetWinVarFloatValue( const char *name, float defaultValue );
+	void UpdateRetailCreditActivation();
+	bool DrawRetailTextEffect( const idVec4 &color );
 
 	float actualX;					// physical coords
 	float actualY;					// ''
@@ -542,6 +552,8 @@ protected:
 	idRegisterList regList;
 
 	idWinBool	hideCursor;
+	bool		retailCreditArmed;
+	int			retailTextEffectStartTime;
 };
 
 ID_INLINE void idWindow::AddDefinedVar( idWinVar* var ) {

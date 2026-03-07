@@ -50,6 +50,61 @@ idCVar gui_mediumFontLimit( "gui_mediumFontLimit", "0.60", CVAR_GUI | CVAR_ARCHI
 
 idList<fontInfoEx_t> idDeviceContext::fonts;
 
+namespace {
+
+static float RetailSmoothStep( float t ) {
+	t = idMath::ClampFloat( 0.0f, 1.0f, t );
+	return t * t * ( 3.0f - 2.0f * t );
+}
+
+static float RetailBezier1D( float a, float b, float c, float d, float t ) {
+	const float invT = 1.0f - t;
+	const float invT2 = invT * invT;
+	const float t2 = t * t;
+	return invT2 * invT * a +
+		3.0f * invT2 * t * b +
+		3.0f * invT * t2 * c +
+		t2 * t * d;
+}
+
+static unsigned int RetailHash( unsigned int value ) {
+	value ^= value >> 16;
+	value *= 0x7feb352du;
+	value ^= value >> 15;
+	value *= 0x846ca68bu;
+	value ^= value >> 16;
+	return value;
+}
+
+static float RetailHashFloat( unsigned int seed ) {
+	return static_cast<float>( RetailHash( seed ) & 0x00ffffffu ) * ( 1.0f / 16777215.0f );
+}
+
+static float RetailHashSigned( unsigned int seed ) {
+	return RetailHashFloat( seed ) * 2.0f - 1.0f;
+}
+
+static int CountRetailGlyphs( const unsigned char *text, int len ) {
+	int count = 0;
+
+	for ( int i = 0; text != NULL && text[ i ] != '\0' && i < len; ) {
+		if ( idStr::IsColor( reinterpret_cast<const char *>( text + i ) ) ) {
+			i += 2;
+			continue;
+		}
+
+		if ( text[ i ] >= GLYPH_START && text[ i ] <= GLYPH_END ) {
+			++count;
+		}
+
+		++i;
+	}
+
+	return count;
+}
+
+}
+
 int idDeviceContext::FindFont( const char *name ) {
 	int c = fonts.Num();
 
@@ -160,10 +215,25 @@ void idDeviceContext::Clear() {
 	activeFont = NULL;
 	mbcs = false;
 	aspectCorrect = true;
+	retailSplineEffectActive = false;
+	retailSplineEffectProgress = 0.0f;
+	retailSplineEffectPoints = 0;
 }
 
 idDeviceContext::idDeviceContext() {
 	Clear();
+}
+
+void idDeviceContext::SetRetailSplineEffect( float progress, int splinePoints ) {
+	retailSplineEffectActive = true;
+	retailSplineEffectProgress = idMath::ClampFloat( 0.0f, 1.0f, progress );
+	retailSplineEffectPoints = idMath::ClampInt( 3, 100, splinePoints );
+}
+
+void idDeviceContext::ClearRetailSplineEffect() {
+	retailSplineEffectActive = false;
+	retailSplineEffectProgress = 0.0f;
+	retailSplineEffectPoints = 0;
 }
 
 void idDeviceContext::SetTransformInfo(const idVec3 &org, const idMat3 &m) {
@@ -709,6 +779,12 @@ int idDeviceContext::DrawText(float x, float y, float scale, idVec4 color, const
 			len = limit;
 		}
 
+		const float lineStartX = x;
+		const float lineWidth = retailSplineEffectActive ? static_cast<float>( TextWidth( text, scale, len ) ) : 0.0f;
+		const float lineHeight = retailSplineEffectActive ? static_cast<float>( MaxCharHeight( scale ) ) : 0.0f;
+		const int visibleGlyphCount = retailSplineEffectActive ? CountRetailGlyphs( s, len ) : 0;
+		int visibleGlyphIndex = 0;
+
 		while (s && *s && count < len) {
 			if ( *s < GLYPH_START || *s > GLYPH_END ) {
 				s++;
@@ -744,13 +820,79 @@ int idDeviceContext::DrawText(float x, float y, float scale, idVec4 color, const
 				continue;
 			} else {
 				float yadj = useScale * glyph->top;
-				PaintChar(x,y - yadj,glyph->imageWidth,glyph->imageHeight,useScale,glyph->s,glyph->t,glyph->s2,glyph->t2,glyph->glyph);
+				float drawX = x;
+				float drawY = y - yadj;
+
+				if ( retailSplineEffectActive && visibleGlyphCount > 0 ) {
+					const float normalizedIndex = ( visibleGlyphCount > 1 ) ? static_cast<float>( visibleGlyphIndex ) / static_cast<float>( visibleGlyphCount - 1 ) : 0.5f;
+					const unsigned int seedBase =
+						static_cast<unsigned int>( visibleGlyphIndex * 131 ) +
+						static_cast<unsigned int>( *s ) * 911u +
+						static_cast<unsigned int>( retailSplineEffectPoints ) * 37u;
+					const float startDelay = 0.03f + 0.09f * RetailHashFloat( seedBase + 0x11u );
+					const float progressDenom = ( 1.0f - startDelay > 0.001f ) ? ( 1.0f - startDelay ) : 0.001f;
+					const float localProgress = RetailSmoothStep(
+						idMath::ClampFloat( 0.0f, 1.0f, ( retailSplineEffectProgress - startDelay ) / progressDenom ) );
+					const float scatter = 1.0f - localProgress;
+					const float pointScale = 1.0f + 0.08f * static_cast<float>( retailSplineEffectPoints - 3 );
+					const float cloudCenterX = lineStartX + lineWidth * ( 0.66f + 0.08f * RetailHashFloat( seedBase + 0x23u ) );
+					const float cloudCenterY = y - lineHeight * ( 0.20f - 0.55f * RetailHashSigned( seedBase + 0x29u ) );
+					const float spreadX = idMath::ClampFloat(
+						lineHeight * 1.6f,
+						lineWidth + lineHeight * 4.0f,
+						lineWidth * ( 0.30f + 0.02f * static_cast<float>( retailSplineEffectPoints ) ) + lineHeight * 2.25f );
+					const float spreadY = idMath::ClampFloat(
+						lineHeight * 0.85f,
+						lineHeight * 5.0f,
+						lineHeight * ( 1.45f + 0.10f * static_cast<float>( retailSplineEffectPoints ) ) );
+					const float lateralBias = ( 0.5f - normalizedIndex ) * lineWidth * 0.28f;
+					const float startX = cloudCenterX + lateralBias + RetailHashSigned( seedBase + 0x31u ) * spreadX;
+					const float startY = cloudCenterY + RetailHashSigned( seedBase + 0x37u ) * spreadY;
+					const float control1X = cloudCenterX + RetailHashSigned( seedBase + 0x41u ) * spreadX * ( 0.55f + 0.08f * pointScale );
+					const float control1Y = cloudCenterY + RetailHashSigned( seedBase + 0x47u ) * spreadY * ( 0.55f + 0.05f * pointScale );
+					const float control2X = drawX + lateralBias * scatter * 0.35f + RetailHashSigned( seedBase + 0x53u ) * spreadX * scatter * 0.18f;
+					const float control2Y = drawY + RetailHashSigned( seedBase + 0x59u ) * spreadY * scatter * 0.16f;
+					const float ghostProgress = localProgress * 0.55f;
+
+					drawX = RetailBezier1D( startX, control1X, control2X, drawX, localProgress );
+					drawY = RetailBezier1D( startY, control1Y, control2Y, drawY, localProgress );
+
+					if ( scatter > 0.12f ) {
+						idVec4 ghostColor = newColor;
+						const float ghostX = RetailBezier1D(
+							startX,
+							cloudCenterX + RetailHashSigned( seedBase + 0x5fu ) * spreadX * 0.8f,
+							control2X,
+							drawX,
+							ghostProgress );
+						const float ghostY = RetailBezier1D(
+							startY,
+							cloudCenterY + RetailHashSigned( seedBase + 0x61u ) * spreadY * 0.8f,
+							control2Y,
+							drawY,
+							ghostProgress );
+
+						ghostColor[ 3 ] *= 0.32f * scatter;
+						renderSystem->SetColor( ghostColor );
+						PaintChar( ghostX, ghostY, glyph->imageWidth, glyph->imageHeight, useScale, glyph->s, glyph->t, glyph->s2, glyph->t2, glyph->glyph );
+					}
+
+					idVec4 glyphColor = newColor;
+					glyphColor[ 3 ] *= idMath::ClampFloat( 0.0f, 1.0f, 0.18f + 0.82f * idMath::Sqrt( localProgress ) );
+					renderSystem->SetColor( glyphColor );
+				}
+
+				PaintChar(drawX, drawY, glyph->imageWidth, glyph->imageHeight, useScale, glyph->s, glyph->t, glyph->s2, glyph->t2, glyph->glyph);
+				if ( retailSplineEffectActive ) {
+					renderSystem->SetColor( newColor );
+				}
 
 				if (cursor == count) {
 					DrawEditCursor(x, y, scale);
 				}
 				x += (glyph->xSkip * useScale) + adjust;
 				s++;
+				visibleGlyphIndex++;
 				count++;
 			}
 		}

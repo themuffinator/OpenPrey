@@ -2818,7 +2818,7 @@ void idCommonLocal::PrintLoadingMessage( const char *msg ) {
 	const float textX = correctedX + ( correctedW - textWidth ) * 0.5f;
 	const float textY = correctedY + 410.0f * textScaleY;
 	Common_DrawScaledSmallString( textX, textY, charWidth, charHeight, msg,
-		idVec4( 0.94f, 0.62f, 0.05f, 1.0f ), true, declManager->FindMaterial( "textures/bigchars", false ) );
+		idVec4( 0.08f, 0.72f, 0.68f, 1.0f ), true, declManager->FindMaterial( "textures/bigchars", false ) );
 	renderSystem->SetColor( idVec4( 1.0f, 1.0f, 1.0f, 1.0f ) );
 	renderSystem->EndFrame( NULL, NULL );
 }

@@ -77,6 +77,148 @@ static void R_MirrorVector( const idVec3 in, orientation_t *surface, orientation
 }
 
 /*
+========================
+R_BuildPortalOrientations
+
+Retail PREY.exe portal subviews transform the current viewer through the
+portal entity basis into a remote camera basis with forward/left flipped.
+========================
+*/
+static void R_BuildPortalOrientations( const renderEntity_t &portalEntity, const renderView_t &remoteRenderView,
+	orientation_t &surface, orientation_t &camera ) {
+	surface.origin = portalEntity.origin;
+	surface.axis = portalEntity.axis;
+
+	camera.origin = remoteRenderView.vieworg;
+	camera.axis[0] = -remoteRenderView.viewaxis[0];
+	camera.axis[1] = -remoteRenderView.viewaxis[1];
+	camera.axis[2] = remoteRenderView.viewaxis[2];
+}
+
+/*
+========================
+R_TransformPortalSubview
+========================
+*/
+static void R_TransformPortalSubview( const renderEntity_t &portalEntity, const renderView_t &remoteRenderView, viewDef_t &parms ) {
+	orientation_t surface, camera;
+
+	R_BuildPortalOrientations( portalEntity, remoteRenderView, surface, camera );
+
+	R_MirrorPoint( tr.viewDef->renderView.vieworg, &surface, &camera, parms.renderView.vieworg );
+	R_MirrorVector( tr.viewDef->renderView.viewaxis[0], &surface, &camera, parms.renderView.viewaxis[0] );
+	R_MirrorVector( tr.viewDef->renderView.viewaxis[1], &surface, &camera, parms.renderView.viewaxis[1] );
+	R_MirrorVector( tr.viewDef->renderView.viewaxis[2], &surface, &camera, parms.renderView.viewaxis[2] );
+}
+
+/*
+========================
+R_PortalViewerPassesRetailGate
+
+Retail PREY.exe rejects portal renders when the current viewpoint is on the
+wrong side of the source portal plane. Primary views use a 16-unit back-off;
+subviews use a 4-unit forward nudge.
+========================
+*/
+static bool R_PortalViewerPassesRetailGate( const renderEntity_t &portalEntity ) {
+	const idVec3 planePoint = tr.viewDef->isSubview
+		? ( portalEntity.origin + portalEntity.axis[0] * 4.0f )
+		: ( portalEntity.origin - portalEntity.axis[0] * 16.0f );
+
+	return ( ( tr.viewDef->renderView.vieworg - planePoint ) * portalEntity.axis[0] ) > 0.0f;
+}
+
+/*
+========================
+R_TransformPortalSkyboxSubview
+
+Retail PREY.exe keeps the current view orientation for portal-sky renders and
+only relocates the eye to the remote skybox camera origin.
+========================
+*/
+static void R_TransformPortalSkyboxSubview( const renderView_t &remoteRenderView, viewDef_t &parms ) {
+	parms.renderView.vieworg = remoteRenderView.vieworg;
+	parms.renderView.viewaxis = tr.viewDef->renderView.viewaxis;
+}
+
+/*
+========================
+R_PortalSubviewBySurface
+
+Build the retail portal-camera viewDef used by both in-world portal subviews
+and portalRenderMap stage captures.
+========================
+*/
+static viewDef_t *R_PortalSubviewBySurface( drawSurf_t *drawSurf ) {
+	const renderView_t *remoteRenderView = drawSurf->space->entityDef->parms.remoteRenderView;
+	if ( !remoteRenderView ) {
+		return NULL;
+	}
+
+	const renderEntity_t &portalEntity = drawSurf->space->entityDef->parms;
+	const int index = drawSurf->material->GetDirectPortalDistance();
+	if ( index >= 0 && index < EXP_REG_NUM_PREDEFINED ) {
+		const int maxPortalDistanceLimit = idMath::FtoiFast( drawSurf->space->entityDef->parms.shaderParms[index] );
+		if ( maxPortalDistanceLimit > 0 &&
+			( tr.viewDef->renderView.vieworg - portalEntity.origin ).LengthSqr() > Square( maxPortalDistanceLimit ) ) {
+			return NULL;
+		}
+	}
+
+	if ( !R_PortalViewerPassesRetailGate( portalEntity ) ) {
+		return NULL;
+	}
+
+	viewDef_t *parms = (viewDef_t *)R_FrameAlloc( sizeof( *parms ) );
+	if ( !parms ) {
+		return NULL;
+	}
+
+	*parms = *tr.viewDef;
+	parms->isSubview = true;
+	parms->isMirror = false;
+	parms->renderView.viewID = 0;	// clear to allow player bodies to show up, and suppress view weapons
+
+	parms->numClipPlanes = 1;
+	parms->clipPlanes[0] = remoteRenderView->viewaxis[0];
+	parms->clipPlanes[0][3] = -( remoteRenderView->vieworg * parms->clipPlanes[0].Normal() );
+
+	R_TransformPortalSubview( portalEntity, *remoteRenderView, *parms );
+	parms->initialViewAreaOrigin = remoteRenderView->vieworg;
+
+	return parms;
+}
+
+/*
+========================
+R_PortalSkyboxSubviewBySurface
+
+Build the retail portal-sky camera viewDef used by both in-world portal-sky
+subviews and skyboxRenderMap stage captures.
+========================
+*/
+static viewDef_t *R_PortalSkyboxSubviewBySurface( drawSurf_t *drawSurf ) {
+	const renderView_t *remoteRenderView = drawSurf->space->entityDef->parms.remoteRenderView;
+	if ( !remoteRenderView ) {
+		return NULL;
+	}
+
+	viewDef_t *parms = (viewDef_t *)R_FrameAlloc( sizeof( *parms ) );
+	if ( !parms ) {
+		return NULL;
+	}
+
+	*parms = *tr.viewDef;
+	parms->isSubview = true;
+	parms->isMirror = false;
+	parms->renderView.viewID = 0;	// clear to allow player bodies to show up, and suppress view weapons
+	R_TransformPortalSkyboxSubview( *remoteRenderView, *parms );
+	parms->initialViewAreaOrigin = remoteRenderView->vieworg;
+
+	return parms;
+}
+
+/*
 =============
 R_PlaneForSurface
 
@@ -342,6 +484,96 @@ static void R_RemoteRender( drawSurf_t *surf, textureStage_t *stage ) {
 
 /*
 =================
+R_PortalRender
+=================
+*/
+static void R_PortalRender( drawSurf_t *surf, textureStage_t *stage ) {
+	viewDef_t *parms;
+
+	if ( stage->dynamicFrameCount == tr.frameCount ) {
+		return;
+	}
+
+	parms = R_PortalSubviewBySurface( surf );
+	if ( !parms ) {
+		return;
+	}
+
+	tr.CropRenderSize( stage->width, stage->height, true );
+
+	parms->renderView.x = 0;
+	parms->renderView.y = 0;
+	parms->renderView.width = SCREEN_WIDTH;
+	parms->renderView.height = SCREEN_HEIGHT;
+
+	tr.RenderViewToViewport( &parms->renderView, &parms->viewport );
+
+	parms->scissor.x1 = 0;
+	parms->scissor.y1 = 0;
+	parms->scissor.x2 = parms->viewport.x2 - parms->viewport.x1;
+	parms->scissor.y2 = parms->viewport.y2 - parms->viewport.y1;
+
+	parms->superView = tr.viewDef;
+	parms->subviewSurface = surf;
+
+	R_RenderView( parms );
+
+	stage->dynamicFrameCount = tr.frameCount;
+	if ( !stage->image ) {
+		stage->image = globalImages->scratchImage;
+	}
+
+	tr.CaptureRenderToImage( stage->image->GetName() );
+	tr.UnCrop();
+}
+
+/*
+=================
+R_SkyboxRender
+=================
+*/
+static void R_SkyboxRender( drawSurf_t *surf, textureStage_t *stage ) {
+	viewDef_t *parms;
+
+	if ( stage->dynamicFrameCount == tr.frameCount ) {
+		return;
+	}
+
+	parms = R_PortalSkyboxSubviewBySurface( surf );
+	if ( !parms ) {
+		return;
+	}
+
+	tr.CropRenderSize( stage->width, stage->height, true );
+
+	parms->renderView.x = 0;
+	parms->renderView.y = 0;
+	parms->renderView.width = SCREEN_WIDTH;
+	parms->renderView.height = SCREEN_HEIGHT;
+
+	tr.RenderViewToViewport( &parms->renderView, &parms->viewport );
+
+	parms->scissor.x1 = 0;
+	parms->scissor.y1 = 0;
+	parms->scissor.x2 = parms->viewport.x2 - parms->viewport.x1;
+	parms->scissor.y2 = parms->viewport.y2 - parms->viewport.y1;
+
+	parms->superView = tr.viewDef;
+	parms->subviewSurface = surf;
+
+	R_RenderView( parms );
+
+	stage->dynamicFrameCount = tr.frameCount;
+	if ( !stage->image ) {
+		stage->image = globalImages->scratchImage;
+	}
+
+	tr.CaptureRenderToImage( stage->image->GetName() );
+	tr.UnCrop();
+}
+
+/*
+=================
 R_MirrorRender
 =================
 */
@@ -507,6 +739,12 @@ bool	R_GenerateSurfaceSubview( drawSurf_t *drawSurf ) {
 			case DI_XRAY_RENDER:
 				R_XrayRender( drawSurf, const_cast<textureStage_t *>(&stage->texture), scissor );
 				break;
+			case DI_PORTAL_RENDER:
+				R_PortalRender( drawSurf, const_cast<textureStage_t *>(&stage->texture) );
+				break;
+			case DI_SKYBOX_RENDER:
+				R_SkyboxRender( drawSurf, const_cast<textureStage_t *>(&stage->texture) );
+				break;
 			}
 		}
 		return true;
@@ -514,58 +752,10 @@ bool	R_GenerateSurfaceSubview( drawSurf_t *drawSurf ) {
 
 	switch ( shader->GetSubviewClass() ) {
 		case SC_PORTAL: {
-			const renderView_t *remoteRenderView = drawSurf->space->entityDef->parms.remoteRenderView;
-			if ( !remoteRenderView ) {
-				return false;
-			}
-
-			// directportal parmN can limit portal rendering distance.
-			const int index = shader->GetDirectPortalDistance();
-			if ( index >= 0 && index < EXP_REG_NUM_PREDEFINED ) {
-				const float maxPortalDistanceLimit = drawSurf->space->entityDef->parms.shaderParms[index];
-				if ( maxPortalDistanceLimit > 0.0f &&
-					( tr.viewDef->renderView.vieworg - drawSurf->space->entityDef->parms.origin ).LengthFast() > maxPortalDistanceLimit ) {
-					return false;
-				}
-			}
-
-			parms = (viewDef_t *)R_FrameAlloc( sizeof( *parms ) );
+			parms = R_PortalSubviewBySurface( drawSurf );
 			if ( !parms ) {
 				return false;
 			}
-			*parms = *tr.viewDef;
-
-			parms->isSubview = true;
-			parms->isMirror = false;
-			parms->renderView.viewID = 0;	// clear to allow player bodies to show up, and suppress view weapons
-
-			const float *dsm = drawSurf->space->modelMatrix;
-			float mm[16] = {
-				-dsm[0], -dsm[1], -dsm[2], dsm[3],
-				-dsm[4], -dsm[5], -dsm[6], dsm[7],
-				dsm[8], dsm[9], dsm[10], dsm[11],
-				dsm[12], dsm[13], dsm[14], dsm[15],
-			};
-
-			parms->numClipPlanes = 1;
-			parms->clipPlanes[0] = remoteRenderView->viewaxis[0];
-			parms->clipPlanes[0][3] = -( remoteRenderView->vieworg * parms->clipPlanes[0].Normal() );
-
-			idVec3 forward, left, up;
-			idVec3 forward2, left2, up2;
-			R_GlobalVectorToLocal( mm, tr.viewDef->renderView.viewaxis[0], forward );
-			R_GlobalVectorToLocal( mm, tr.viewDef->renderView.viewaxis[1], left );
-			R_GlobalVectorToLocal( mm, tr.viewDef->renderView.viewaxis[2], up );
-
-			float mmm[16];
-			R_AxisToModelMatrix( remoteRenderView->viewaxis, remoteRenderView->vieworg, mmm );
-			R_LocalVectorToGlobal( mmm, forward, forward2 );
-			R_LocalVectorToGlobal( mmm, left, left2 );
-			R_LocalVectorToGlobal( mmm, up, up2 );
-
-			parms->renderView.viewaxis = idMat3( forward2, left2, up2 );
-			parms->initialViewAreaOrigin = remoteRenderView->vieworg + remoteRenderView->viewaxis[0] * 16.0f;
-			parms->renderView.vieworg = remoteRenderView->vieworg;
 			parms->scissor = scissor;
 
 			parms->superView = tr.viewDef;
@@ -575,29 +765,11 @@ bool	R_GenerateSurfaceSubview( drawSurf_t *drawSurf ) {
 			return true;
 		}
 		case SC_PORTAL_SKYBOX: {
-			const renderView_t *remoteRenderView = drawSurf->space->entityDef->parms.remoteRenderView;
-			if ( !remoteRenderView ) {
-				return false;
-			}
-
-			// Retail-like behavior: allow at most one skybox subview per frame.
-			if ( tr.SkyboxRenderedInFrame() || tr.viewDef->isSubview ) {
-				return false;
-			}
-
-			parms = (viewDef_t *)R_FrameAlloc( sizeof( *parms ) );
+			parms = R_PortalSkyboxSubviewBySurface( drawSurf );
 			if ( !parms ) {
 				return false;
 			}
-			tr.RenderSkyboxInFrame();
-			*parms = *tr.viewDef;
-
-			parms->isSubview = true;
-			parms->isMirror = false;
-			parms->renderView.viewID = 0;	// clear to allow player bodies to show up, and suppress view weapons
-			parms->initialViewAreaOrigin = remoteRenderView->vieworg;
-			parms->renderView.vieworg = remoteRenderView->vieworg;
-			parms->scissor = scissor;
+			parms->scissor = tr.viewDef->scissor;
 
 			parms->superView = tr.viewDef;
 			parms->subviewSurface = drawSurf;

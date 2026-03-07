@@ -98,6 +98,8 @@ public:
 	bool				GetOverStrike() { return overStrikeMode; }
 
 	void				DrawEditCursor(float x, float y, float scale);
+	void				SetRetailSplineEffect( float progress, int splinePoints );
+	void				ClearRetailSplineEffect();
 
 	enum {
 		CURSOR_ARROW,
@@ -171,6 +173,9 @@ private:
 	bool				aspectCorrect;
 
 	bool				mbcs;
+	bool				retailSplineEffectActive;
+	float				retailSplineEffectProgress;
+	int					retailSplineEffectPoints;
 };
 
 #endif /* !__DEVICECONTEXT_H__ */

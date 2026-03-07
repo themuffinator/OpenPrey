@@ -1572,6 +1572,22 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 			continue;
 		}
 
+		if (  !token.Icmp( "portalRenderMap" ) ) {
+			ts->dynamic = DI_PORTAL_RENDER;
+			ts->width = src.ParseInt();
+			ts->height = src.ParseInt();
+			ts->texgen = TG_SCREEN;
+			continue;
+		}
+
+		if (  !token.Icmp( "skyboxRenderMap" ) ) {
+			ts->dynamic = DI_SKYBOX_RENDER;
+			ts->width = src.ParseInt();
+			ts->height = src.ParseInt();
+			ts->texgen = TG_SCREEN;
+			continue;
+		}
+
 		if (  !token.Icmp( "xrayRenderMap" ) ) {
 			ts->dynamic = DI_XRAY_RENDER;
 			ts->width = src.ParseInt();

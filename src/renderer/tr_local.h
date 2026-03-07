@@ -449,6 +449,7 @@ typedef struct {
 	idImage *			bumpImage;
 	idImage *			diffuseImage;
 	idImage *			specularImage;
+	float				alphaTestThreshold;	// negative disables interaction alpha clipping
 
 	idVec4				diffuseColor;	// may have a light color baked into it, will be < tr.backEndRendererMaxLight
 	idVec4				specularColor;	// may have a light color baked into it, will be < tr.backEndRendererMaxLight

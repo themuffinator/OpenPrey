@@ -48,6 +48,14 @@ idCVar bse_useFrustumCull(
 	CVAR_RENDERER | CVAR_BOOL,
 	"if 1, apply renderer frustum culling to BSE effect defs/surfaces");
 
+static ID_INLINE float R_CalcViewAndEntityDistance( const viewDef_t *viewDef, const renderEntity_t *entity ) {
+	return ( viewDef->renderView.vieworg - entity->origin ).LengthFast();
+}
+
+static ID_INLINE float R_CalcViewAndLightDistance( const viewDef_t *viewDef, const renderLight_t *light ) {
+	return ( viewDef->renderView.vieworg - light->origin ).LengthFast();
+}
+
 // Mirrors/remote subviews must evaluate suppress/allow as viewID 0.
 static ID_INLINE int R_EffectiveViewIDForSubview() {
 	if ( tr.viewDef != NULL && tr.viewDef->isSubview ) {
@@ -939,7 +947,8 @@ void R_AddLightSurfaces( void ) {
 		// evaluate the light shader registers
 		float *lightRegs =(float *)R_FrameAlloc( lightShader->GetNumRegisters() * sizeof( float ) );
 		vLight->shaderRegisters = lightRegs;
-		lightShader->EvaluateRegisters( lightRegs, light->parms.shaderParms, tr.viewDef, NULL);
+		light->parms.shaderParms[SHADERPARM_DISTANCE] = R_CalcViewAndLightDistance( tr.viewDef, &light->parms );
+		lightShader->EvaluateRegisters( lightRegs, light->parms.shaderParms, tr.viewDef, light->parms.referenceSound );
 
 		// if this is a purely additive light and no stage in the light shader evaluates
 		// to a positive light value, we can completely skip the light
@@ -1270,7 +1279,7 @@ void R_AddDrawSurf( const srfTriangles_t *tri, const viewEntity_t *space, const 
 			// evaluate the reference shader to find our shader parms
 			const shaderStage_t *pStage;
 
-			renderEntity->referenceShader->EvaluateRegisters( refRegs, renderEntity->shaderParms, tr.viewDef, NULL);
+			renderEntity->referenceShader->EvaluateRegisters( refRegs, renderEntity->shaderParms, tr.viewDef, renderEntity->referenceSound );
 			pStage = renderEntity->referenceShader->GetStage(0);
 
 			memcpy( generatedShaderParms, renderEntity->shaderParms, sizeof( generatedShaderParms ) );
@@ -1284,24 +1293,24 @@ void R_AddDrawSurf( const srfTriangles_t *tri, const viewEntity_t *space, const 
 			shaderParms = renderEntity->shaderParms;
 		}
 
-		float oldFloatTime;
-		int oldTime;
-// jmarshall
-		//if ( space->entityDef && space->entityDef->parms.timeGroup ) {
-		//	oldFloatTime = tr.viewDef->floatTime;
-		//	oldTime = tr.viewDef->renderView.time;
-		//
-		//	tr.viewDef->floatTime = game->GetTimeGroupTime( space->entityDef->parms.timeGroup ) * 0.001;
-		//	tr.viewDef->renderView.time = game->GetTimeGroupTime( space->entityDef->parms.timeGroup );
-		//}
-// jmarshall
-		shader->EvaluateRegisters( regs, shaderParms, tr.viewDef, NULL);
-		// jmarshall
-		//if ( space->entityDef && space->entityDef->parms.timeGroup ) {
-		//	tr.viewDef->floatTime = oldFloatTime;
-		//	tr.viewDef->renderView.time = oldTime;
-		//}
-		// jmarshall
+		float oldFloatTime = 0.0f;
+		int oldTime = 0;
+
+		if ( space->entityDef && space->entityDef->parms.timeGroup ) {
+			oldFloatTime = tr.viewDef->floatTime;
+			oldTime = tr.viewDef->renderView.time;
+
+			tr.viewDef->floatTime = game->GetTimeGroupTime( space->entityDef->parms.timeGroup ) * 0.001f;
+			tr.viewDef->renderView.time = game->GetTimeGroupTime( space->entityDef->parms.timeGroup );
+		}
+
+		( (float *)shaderParms )[ SHADERPARM_DISTANCE ] = R_CalcViewAndEntityDistance( tr.viewDef, renderEntity );
+		shader->EvaluateRegisters( regs, shaderParms, tr.viewDef, renderEntity->referenceSound );
+
+		if ( space->entityDef && space->entityDef->parms.timeGroup ) {
+			tr.viewDef->floatTime = oldFloatTime;
+			tr.viewDef->renderView.time = oldTime;
+		}
 	}
 
 	// check for deformations
@@ -1618,7 +1627,8 @@ void R_AddEffectSurfaces(void) {
 
 		viewEntity_t* vEffect = (viewEntity_t*)R_ClearedFrameAlloc(sizeof(*vEffect));
 		vEffect->entityDef = NULL;
-		vEffect->weaponDepthHack = (def->parms.weaponDepthHackInViewID != 0 && def->parms.weaponDepthHackInViewID == viewID);
+		vEffect->weaponDepthHack = (def->parms.weaponDepthHackInViewID != 0 &&
+			def->parms.weaponDepthHackInViewID == viewID);
 		vEffect->modelDepthHack = def->parms.modelDepthHack;
 		R_AxisToModelMatrix(def->parms.axis, def->parms.origin, vEffect->modelMatrix);
 		myGlMultMatrix(vEffect->modelMatrix, tr.viewDef->worldSpace.modelViewMatrix, vEffect->modelViewMatrix);
