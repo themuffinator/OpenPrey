@@ -1871,6 +1871,13 @@ bool idEntity::ResolveSoundName( const char *soundName, const char *&sound ) con
 		return sound[0] != '\0';
 	}
 
+	// Spawnarg-driven aliases are conventionally named snd_* in Prey content.
+	// If the key is missing and no real decl exists under that name, treating the
+	// alias itself as a sound shader creates a default beep channel.
+	if ( idStr::Icmpn( soundName, "snd_", 4 ) == 0 && declManager->FindSound( soundName, false ) == NULL ) {
+		return false;
+	}
+
 	sound = soundName;
 	return true;
 }

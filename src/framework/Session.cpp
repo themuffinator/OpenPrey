@@ -137,6 +137,42 @@ static const idDeclEntityDef *Session_FindMapDeclForLoading( const char *mapName
 	return NULL;
 }
 
+static const idDeclEntityDef *Session_FindMapDeclForLoadMusic( const char *mapName ) {
+	const idDecl *mapDecl = NULL;
+
+	// Retail Prey uses the raw si_map key here and only falls back to defaultMap
+	// if the mapDef itself is missing, not when snd_loadmusic is absent.
+	if ( mapName != NULL && mapName[ 0 ] != '\0' ) {
+		mapDecl = declManager->FindType( DECL_MAPDEF, mapName, false );
+	}
+	if ( mapDecl == NULL ) {
+		mapDecl = declManager->FindType( DECL_MAPDEF, "defaultMap", false );
+	}
+
+	return static_cast<const idDeclEntityDef *>( mapDecl );
+}
+
+static idStr Session_GetMapLoadMusic( const char *mapName ) {
+	const char *resolvedMapName = ( mapName != NULL ) ? mapName : "";
+	idStr loadMusic;
+
+	const idDeclEntityDef *mapDef = Session_FindMapDeclForLoadMusic( resolvedMapName );
+	if ( mapDef != NULL ) {
+		loadMusic = mapDef->dict.GetString( "snd_loadmusic", "" );
+	}
+
+	common->Printf( "Map: %s plays music: %s\n", resolvedMapName, loadMusic.c_str() );
+	return loadMusic;
+}
+
+static void Session_ServiceLoadingSound() {
+	// Startup +map loads happen before the regular frame loop starts, so
+	// loading music must be mixed explicitly while ExecuteMapChange blocks.
+	if ( soundSystem != NULL ) {
+		soundSystem->Render();
+	}
+}
+
 static int Session_CountVisibleSmallChars( const char *string ) {
 	if ( !( string && *string ) ) {
 		return 0;
@@ -2026,6 +2062,9 @@ void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
 		!idAsyncNetwork::serverDedicated.GetBool() &&
 		menuSoundWorld != NULL &&
 		g_levelloadmusic.GetBool();
+	const idStr loadMusic = playLevelLoadMusic ?
+		Session_GetMapLoadMusic( mapSpawnData.serverInfo.GetString( "si_map" ) ) :
+		idStr();
 
 	loadingAssetQueueActive = false;
 	loadingAssetQueueTotal = 0;
@@ -2049,7 +2088,13 @@ void idSessionLocal::ExecuteMapChange( bool noFadeWipe ) {
 	if ( playLevelLoadMusic ) {
 		SetPlayingSoundWorld( menuSoundWorld );
 		soundSystem->SetMute( false );
-		menuSoundWorld->PlayShaderDirectly( "guisounds_menu_music", 3 );
+		if ( loadMusic.Length() > 0 ) {
+			if ( menuSoundWorld->IsPaused() ) {
+				menuSoundWorld->UnPause();
+			}
+			menuSoundWorld->PlayShaderDirectly( loadMusic );
+			Session_ServiceLoadingSound();
+		}
 	}
 
 	// unpause the game sound world
@@ -3062,6 +3107,11 @@ void idSessionLocal::PacifierUpdate() {
 		guiLoading->StateChanged( com_frameTime );
 	}
 
+	// Retail keeps load-screen audio alive for the duration of ExecuteMapChange.
+	// Route through the session selector so loading always mixes the menu sound world.
+	SetPlayingSoundWorld();
+	soundSystem->Render();
+
 	Sys_GenerateEvents();
 
 	UpdateScreen();
@@ -3741,6 +3791,9 @@ void idSessionLocal::SetPlayingSoundWorld( idSoundWorld *soundWorld ) {
 void idSessionLocal::SetPlayingSoundWorld() {
 	// Keep explicit menu/intro screens on the menu sound world, even while a map is loaded.
 	if ( guiActive && ( guiActive == guiMainMenu || guiActive == guiIntro ) ) {
+		SetPlayingSoundWorld( menuSoundWorld );
+	} else if ( insideExecuteMapChange ) {
+		// Retail Prey keeps loading-screen music on the menu sound world until the map finishes loading.
 		SetPlayingSoundWorld( menuSoundWorld );
 	} else if ( mapSpawned ) {
 		// Once gameplay is active, keep using the game sound world to avoid stale GUI audio routing.
