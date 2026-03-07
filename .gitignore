@@ -1,6 +1,10 @@
 # Prerequisites
 *.d
 
+# Python cache artifacts
+__pycache__/
+*.pyc
+
 # Compiled Object files
 *.slo
 *.lo

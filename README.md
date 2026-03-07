@@ -190,6 +190,15 @@ meson install -C builddir --no-rebuild --skip-subprojects
 
 `meson install` creates the local runtime tree used for testing and packaging input. Release packaging strips build-only artifacts such as `.pdb`, `.lib`, `.exp`, and `.ilk`.
 
+### Nightly Packaging
+
+GitHub nightly builds package the staged `.install/` tree into `openprey-<version-tag>-windows.zip`.
+
+- `openprey/game_<arch>.dll` stays as a loose runtime module inside the packaged `openprey/` directory
+- staged overlay content is bundled into `openprey/pak0.pk4`
+- the workflow publishes or updates a `nightly-<version-tag>` GitHub release with generated notes
+- Windows is the only actively published nightly target until non-Windows Meson hosts are enabled
+
 </details>
 
 ---
