@@ -3871,7 +3871,25 @@ idSessionLocal::ReadCDKey
 =================
 */
 void idSessionLocal::ReadCDKey( void ) {
-	
+	memset( cdkey, 0, sizeof( cdkey ) );
+	memset( xpkey, 0, sizeof( xpkey ) );
+	cdkey_state = CDKEY_UNKNOWN;
+	xpkey_state = CDKEY_NA;
+	authEmitTimeout = 0;
+	authWaitBox = false;
+	authMsg.Clear();
+
+	idStr keyPath = fileSystem->BuildOSPath( cvarSystem->GetCVarString( "fs_savepath" ), BASE_GAMEDIR, CDKEY_FILE );
+	idFileLocal file( fileSystem->OpenExplicitFileRead( keyPath.c_str() ) );
+	if ( file == NULL ) {
+		common->Printf( "Couldn't read %s.\n", keyPath.c_str() );
+		return;
+	}
+
+	char keyBuffer[ CDKEY_BUF_LEN ];
+	memset( keyBuffer, 0, sizeof( keyBuffer ) );
+	file->Read( keyBuffer, CDKEY_BUF_LEN - 1 );
+	idStr::Copynz( cdkey, keyBuffer, sizeof( cdkey ) );
 }
 
 /*
@@ -3880,7 +3898,16 @@ idSessionLocal::WriteCDKey
 ================
 */
 void idSessionLocal::WriteCDKey( void ) {
-	
+	idStr keyPath = fileSystem->BuildOSPath( cvarSystem->GetCVarString( "fs_savepath" ), BASE_GAMEDIR, CDKEY_FILE );
+	fileSystem->CreateOSPath( keyPath.c_str() );
+
+	idFileLocal file( fileSystem->OpenExplicitFileWrite( keyPath.c_str() ) );
+	if ( file == NULL ) {
+		common->Printf( "Couldn't write %s.\n", keyPath.c_str() );
+		return;
+	}
+
+	file->Printf( "%s%s", cdkey, CDKEY_TEXT );
 }
 
 /*

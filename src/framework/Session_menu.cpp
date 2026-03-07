@@ -1711,6 +1711,9 @@ const char* idSessionLocal::MessageBox( msgBoxType_t type, const char *message, 
 		case MSG_CDKEY:
 			guiMsg->SetStateString( "left", common->GetLanguageDict()->GetString( "#str_04339" ) );
 			guiMsg->SetStateString( "right", common->GetLanguageDict()->GetString( "#str_04340" ) );
+			guiMsg->SetStateString( "visible_left", "1" );
+			guiMsg->SetStateString( "visible_mid", "0" );
+			guiMsg->SetStateString( "visible_right", "1" );
 			guiMsg->SetStateString( "visible_msgbox", "0" );
 			guiMsg->SetStateString( "visible_cdkey", "1" );
 			guiMsg->SetStateString( "visible_hasxp", fileSystem->HasD3XP() ? "1" : "0" );
