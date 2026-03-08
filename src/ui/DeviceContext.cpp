@@ -501,6 +501,31 @@ void idDeviceContext::DrawMaterial(float x, float y, float w, float h, const idM
 	DrawStretchPic( x, y, w, h, s0, t0, s1, t1, mat);
 }
 
+void idDeviceContext::DrawMaterialUV( float x, float y, float w, float h, const idMaterial *mat, const idVec4 &color, float s0, float t0, float s1, float t1 ) {
+	if ( mat == NULL ) {
+		return;
+	}
+
+	renderSystem->SetColor( color );
+
+	if ( w < 0.0f ) {
+		w = -w;
+		idSwap( s0, s1 );
+	}
+
+	if ( h < 0.0f ) {
+		h = -h;
+		idSwap( t0, t1 );
+	}
+
+	if ( ClippedCoords( &x, &y, &w, &h, &s0, &t0, &s1, &t1 ) ) {
+		return;
+	}
+
+	AdjustCoords( &x, &y, &w, &h );
+	DrawStretchPic( x, y, w, h, s0, t0, s1, t1, mat );
+}
+
 void idDeviceContext::DrawMaterialRotated(float x, float y, float w, float h, const idMaterial *mat, const idVec4 &color, float scalex, float scaley, float angle) {
 	
 	renderSystem->SetColor(color);

@@ -111,6 +111,56 @@ static const idMaterial *Session_FindFirstResolvedMaterial( const char * const *
 	return fallback;
 }
 
+static idStr Session_FindResolvedMaterialName( const char *materialName ) {
+	if ( materialName == NULL || materialName[ 0 ] == '\0' ) {
+		return "";
+	}
+
+	const idMaterial *material = declManager->FindMaterial( materialName, true );
+	if ( material == NULL || material->GetState() == DS_DEFAULTED ) {
+		return "";
+	}
+
+	return materialName;
+}
+
+static void Session_SetLoadingBackgroundExpansionStates( idUserInterface *gui, const char *loadingBackground ) {
+	static const char *suffixes[] = {
+		"_left",
+		"_right",
+		"_top",
+		"_bottom"
+	};
+	static const char *imageStateNames[] = {
+		"image_left",
+		"image_right",
+		"image_top",
+		"image_bottom"
+	};
+	static const char *backgroundStateNames[] = {
+		"loading_bkgnd_left",
+		"loading_bkgnd_right",
+		"loading_bkgnd_top",
+		"loading_bkgnd_bottom"
+	};
+
+	if ( gui == NULL ) {
+		return;
+	}
+
+	for ( int i = 0; i < ( sizeof( suffixes ) / sizeof( suffixes[ 0 ] ) ); i++ ) {
+		idStr expandedMaterial;
+		if ( loadingBackground != NULL && loadingBackground[ 0 ] != '\0' ) {
+			expandedMaterial = loadingBackground;
+			expandedMaterial += suffixes[ i ];
+			expandedMaterial = Session_FindResolvedMaterialName( expandedMaterial.c_str() );
+		}
+
+		gui->SetStateString( imageStateNames[ i ], expandedMaterial.c_str() );
+		gui->SetStateString( backgroundStateNames[ i ], expandedMaterial.c_str() );
+	}
+}
+
 static const idDeclEntityDef *Session_FindMapDeclForLoading( const char *mapName ) {
 	if ( mapName == NULL || mapName[ 0 ] == '\0' ) {
 		return NULL;
@@ -1933,6 +1983,7 @@ void idSessionLocal::LoadLoadingGui( const char *mapName ) {
 		guiLoading->SetStateFloat( "map_loading", 0.0f );
 		guiLoading->SetStateString( "loading_bkgnd", loadingBackground.c_str() );
 		guiLoading->SetStateString( "image", loadingBackground.c_str() );
+		Session_SetLoadingBackgroundExpansionStates( guiLoading, loadingBackground.c_str() );
 		guiLoading->SetStateString( "loading_levelname", loadingLevelName );
 		guiLoading->SetStateString( "friendlyname", loadingLevelName );
 		guiLoading->SetStateString( "loading_objectives", loadingObjectives );
@@ -3457,6 +3508,12 @@ void idSessionLocal::Frame() {
 
 	if ( !mapSpawned ) {
 		return;
+	}
+
+	if ( guiActive == guiIntro && !insideExecuteMapChange ) {
+		// Prey's empty intro GUI can remain latched after a single-player menu start.
+		// If it does, the session never reaches RunGameTic and the screen stays black.
+		ExitMenu();
 	}
 
 	if ( guiActive ) {

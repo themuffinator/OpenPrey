@@ -31,12 +31,17 @@ windowDef Desktop {
 
 	windowDef Main_Portal {
 		rect		0, 0, 640, 480
+		noclip		1
 
 		windowDef Background {
 			rect		0, 0, 640, 480
 			backcolor	0, 0, 0, 0
 			matcolor	1, 1, 1, 1
-			background	"guis/assets/menu/background.tga"
+			background	"guis/assets/menu/background_center"
+			backgroundLeft	"guis/assets/menu/background_left"
+			backgroundRight	"guis/assets/menu/background_right"
+			backgroundTop	"guis/assets/menu/background_top"
+			backgroundBottom "guis/assets/menu/background_bottom"
 		}
 	}
 	windowDef PreyLogo {

@@ -502,6 +502,10 @@ protected:
 	idWinFloat textstyle;
 	idWinInt itemheight;
 	idWinInt scrollbar;
+	idWinBackground backgroundLeft;
+	idWinBackground backgroundRight;
+	idWinBackground backgroundTop;
+	idWinBackground backgroundBottom;
 	idWinStr backgroundHover;
 	idWinStr backgroundFocus;
 	idWinStr backgroundLine;

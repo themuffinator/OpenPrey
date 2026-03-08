@@ -2701,6 +2701,31 @@ static const idMaterial *Common_FindFirstResolvedMaterial( const char * const *m
 	return fallback;
 }
 
+static void Common_DrawLoadingExpansionSlice( const idMaterial *material, const float splashX, const float splashY, const float splashW, const float splashH, const float expansionSize, const float baseExtent, const bool vertical, const bool trailingEdge ) {
+	if ( material == NULL || expansionSize <= 0.0f || baseExtent <= 0.0f ) {
+		return;
+	}
+
+	const float fraction = idMath::ClampFloat( 0.0f, 1.0f, expansionSize / baseExtent );
+	if ( fraction <= 0.0f ) {
+		return;
+	}
+
+	if ( vertical ) {
+		if ( trailingEdge ) {
+			renderSystem->DrawStretchPic( splashX, splashY + splashH, splashW, expansionSize, 0.0f, 0.0f, 1.0f, fraction, material );
+		} else {
+			renderSystem->DrawStretchPic( splashX, splashY - expansionSize, splashW, expansionSize, 0.0f, 1.0f - fraction, 1.0f, 1.0f, material );
+		}
+	} else {
+		if ( trailingEdge ) {
+			renderSystem->DrawStretchPic( splashX + splashW, splashY, expansionSize, splashH, 0.0f, 0.0f, fraction, 1.0f, material );
+		} else {
+			renderSystem->DrawStretchPic( splashX - expansionSize, splashY, expansionSize, splashH, 1.0f - fraction, 0.0f, 1.0f, 1.0f, material );
+		}
+	}
+}
+
 static void Common_DrawScaledSmallString( float x, float y, float charWidth, float charHeight,
 	const char *string, const idVec4 &setColor, bool forceColor, const idMaterial *material ) {
 	if ( !( string && *string ) || !material || charWidth <= 0.0f || charHeight <= 0.0f ) {
@@ -2787,7 +2812,8 @@ void idCommonLocal::PrintLoadingMessage( const char *msg ) {
 		correctedH = virtualHeight * textScaleY;
 	}
 
-	if ( cvarSystem->GetCVarBool( "ui_aspectCorrection" ) ) {
+	const bool aspectCorrect = cvarSystem->GetCVarBool( "ui_aspectCorrection" );
+	if ( aspectCorrect ) {
 		splashX = correctedX;
 		splashY = correctedY;
 		splashW = correctedW;
@@ -2798,8 +2824,8 @@ void idCommonLocal::PrintLoadingMessage( const char *msg ) {
 	renderSystem->DrawStretchPic( 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 1, 1, declManager->FindMaterial( "_white" ) );
 	renderSystem->SetColor( idVec4( 1.0f, 1.0f, 1.0f, 1.0f ) );
 	static const char *splashMaterialCandidates[] = {
-		"gfx/guis/loadscreens/generic",
 		"guis/assets/loading/loading",
+		"gfx/guis/loadscreens/generic",
 		"gfx/splashScreen",
 		"gfx/splashscreen"
 	};
@@ -2808,6 +2834,31 @@ void idCommonLocal::PrintLoadingMessage( const char *msg ) {
 		sizeof( splashMaterialCandidates ) / sizeof( splashMaterialCandidates[ 0 ] )
 	);
 	if ( splashMaterial ) {
+		if ( idStr::IcmpPath( splashMaterial->GetName(), "guis/assets/loading/loading" ) == 0 ) {
+			static const char *splashEdgeMaterialNames[] = {
+				"guis/assets/loading/loading_left",
+				"guis/assets/loading/loading_right",
+				"guis/assets/loading/loading_top",
+				"guis/assets/loading/loading_bottom"
+			};
+			const idMaterial *splashEdgeMaterials[ 4 ] = {
+				Common_FindFirstResolvedMaterial( &splashEdgeMaterialNames[ 0 ], 1 ),
+				Common_FindFirstResolvedMaterial( &splashEdgeMaterialNames[ 1 ], 1 ),
+				Common_FindFirstResolvedMaterial( &splashEdgeMaterialNames[ 2 ], 1 ),
+				Common_FindFirstResolvedMaterial( &splashEdgeMaterialNames[ 3 ], 1 )
+			};
+
+			const float xExpand = ( splashX > 0.0f ) ? splashX : 0.0f;
+			const float yExpand = ( splashY > 0.0f ) ? splashY : 0.0f;
+			if ( xExpand > 0.0f ) {
+				Common_DrawLoadingExpansionSlice( splashEdgeMaterials[ 0 ], splashX, splashY, splashW, splashH, xExpand, splashW, false, false );
+				Common_DrawLoadingExpansionSlice( splashEdgeMaterials[ 1 ], splashX, splashY, splashW, splashH, xExpand, splashW, false, true );
+			} else if ( yExpand > 0.0f ) {
+				Common_DrawLoadingExpansionSlice( splashEdgeMaterials[ 2 ], splashX, splashY, splashW, splashH, yExpand, splashH, true, false );
+				Common_DrawLoadingExpansionSlice( splashEdgeMaterials[ 3 ], splashX, splashY, splashW, splashH, yExpand, splashH, true, true );
+			}
+		}
+
 		renderSystem->DrawStretchPic( splashX, splashY, splashW, splashH, 0, 0, 1, 1, splashMaterial );
 	}
 
@@ -2816,9 +2867,11 @@ void idCommonLocal::PrintLoadingMessage( const char *msg ) {
 	const float charHeight = SMALLCHAR_HEIGHT * textScaleY;
 	const float textWidth = charCount * charWidth;
 	const float textX = correctedX + ( correctedW - textWidth ) * 0.5f;
-	const float textY = correctedY + 410.0f * textScaleY;
+	// Mirror screenaligny bottom: keep the authored y and add the tall-screen expansion.
+	const float textY = correctedY + 410.0f * textScaleY + ( aspectCorrect ? splashY : 0.0f );
+	// Match the startup splash text to the map-name color used by the loading GUI.
 	Common_DrawScaledSmallString( textX, textY, charWidth, charHeight, msg,
-		idVec4( 0.08f, 0.72f, 0.68f, 1.0f ), true, declManager->FindMaterial( "textures/bigchars", false ) );
+		idVec4( 0.65f, 0.75f, 1.0f, 0.8f ), true, declManager->FindMaterial( "textures/bigchars", false ) );
 	renderSystem->SetColor( idVec4( 1.0f, 1.0f, 1.0f, 1.0f ) );
 	renderSystem->EndFrame( NULL, NULL );
 }

@@ -657,6 +657,9 @@ void idSessionLocal::SetMainMenuGuiVars( void ) {
 #else
 	guiMainMenu->SetStateString( "nightmare", cvarSystem->GetCVarBool( "g_nightmare" ) ? "1" : "0" );
 #endif
+	guiMainMenu->SetStateString( "roadhouseCompleted", cvarSystem->GetCVarBool( "g_roadhouseCompleted" ) ? "1" : "0" );
+	guiMainMenu->SetStateString( "wicked", cvarSystem->GetCVarBool( "g_wicked" ) ? "1" : "0" );
+	guiMainMenu->SetStateString( "casino", cvarSystem->GetCVarBool( "g_casino" ) ? "1" : "0" );
 	guiMainMenu->SetStateString( "browser_levelshot", "guis/assets/loading/thumbs/nothing" );
 	Session_RefreshMainMenuAudioState( guiMainMenu );
 
@@ -985,6 +988,10 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 		
 		if ( !idStr::Icmp( cmd, "startGame" ) ) {
 			cvarSystem->SetCVarInteger( "g_skill", guiMainMenu->State().GetInt( "skill" ) );
+			const bool casinoMode = guiMainMenu->State().GetBool( "casino" );
+			const bool wickedMode = !casinoMode && guiMainMenu->State().GetBool( "wicked" );
+			cvarSystem->SetCVarBool( "g_casino", casinoMode );
+			cvarSystem->SetCVarBool( "g_wicked", wickedMode );
 			if ( icmd < args.Argc() ) {
 				StartNewGame( args.Argv( icmd++ ) );
 			} else {

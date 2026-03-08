@@ -97,6 +97,10 @@ const idRegEntry idWindow::RegisterVars[] = {
 	{ "noevents", idRegister::BOOL },
 	{ "text", idRegister::STRING },
 	{ "background", idRegister::STRING },
+	{ "backgroundLeft", idRegister::STRING },
+	{ "backgroundRight", idRegister::STRING },
+	{ "backgroundTop", idRegister::STRING },
+	{ "backgroundBottom", idRegister::STRING },
 	{ "runscript", idRegister::STRING },
 	{ "varbackground", idRegister::STRING },
 	{ "cvar", idRegister::STRING },
@@ -458,6 +462,42 @@ static const idMaterial *FindWindowMaterial( const idWindow *window, const char 
 	return declManager->FindMaterial( materialName );
 }
 
+enum backgroundExpansionEdge_t {
+	BACKGROUND_EXPANSION_LEFT,
+	BACKGROUND_EXPANSION_RIGHT,
+	BACKGROUND_EXPANSION_TOP,
+	BACKGROUND_EXPANSION_BOTTOM
+};
+
+static void DrawBackgroundExpansionSlice( idDeviceContext *dc, const idRectangle &backgroundRect, float expansionSize, float baseExtent, const idMaterial *material, const idVec4 &color, backgroundExpansionEdge_t edge ) {
+	if ( dc == NULL || material == NULL || expansionSize <= 0.0f || baseExtent <= 0.0f ) {
+		return;
+	}
+
+	const float fraction = idMath::ClampFloat( 0.0f, 1.0f, expansionSize / baseExtent );
+	if ( fraction <= 0.0f ) {
+		return;
+	}
+
+	switch ( edge ) {
+		case BACKGROUND_EXPANSION_LEFT:
+			dc->DrawMaterialUV( backgroundRect.x - expansionSize, backgroundRect.y, expansionSize, backgroundRect.h, material, color, 1.0f - fraction, 0.0f, 1.0f, 1.0f );
+			break;
+
+		case BACKGROUND_EXPANSION_RIGHT:
+			dc->DrawMaterialUV( backgroundRect.x + backgroundRect.w, backgroundRect.y, expansionSize, backgroundRect.h, material, color, 0.0f, 0.0f, fraction, 1.0f );
+			break;
+
+		case BACKGROUND_EXPANSION_TOP:
+			dc->DrawMaterialUV( backgroundRect.x, backgroundRect.y - expansionSize, backgroundRect.w, expansionSize, material, color, 0.0f, 1.0f - fraction, 1.0f, 1.0f );
+			break;
+
+		case BACKGROUND_EXPANSION_BOTTOM:
+			dc->DrawMaterialUV( backgroundRect.x, backgroundRect.y + backgroundRect.h, backgroundRect.w, expansionSize, material, color, 0.0f, 0.0f, 1.0f, fraction );
+			break;
+	}
+}
+
 static void DrawTabButtonSegments( idDeviceContext *dc, const idRectangle &tabRect, bool verticalTabs, float edgeSize, const idMaterial *startMat, const idMaterial *middleMat, const idMaterial *endMat, const idVec4 &materialColor, const idVec4 &fallbackColor ) {
 	if ( dc == NULL ) {
 		return;
@@ -755,6 +795,10 @@ void idWindow::CommonInit() {
 	borderColor.Zero();
 	background = NULL;
 	backGroundName = "";
+	backgroundLeft = "";
+	backgroundRight = "";
+	backgroundTop = "";
+	backgroundBottom = "";
 	focusedChild = NULL;
 	captureChild = NULL;
 	overChild = NULL;
@@ -824,6 +868,10 @@ size_t idWindow::Allocated() {
 	int sz = name.Allocated();
 	sz += text.Size();
 	sz += backGroundName.Size();
+	sz += backgroundLeft.Size();
+	sz += backgroundRight.Size();
+	sz += backgroundTop.Size();
+	sz += backgroundBottom.Size();
 
 	c = definedVars.Num();
 	for (i = 0; i < c; i++) {
@@ -2128,6 +2176,22 @@ void idWindow::DrawBackground(const idRectangle &drawRect) {
 		dc->DrawFilledRect( backgroundRect.x, backgroundRect.y, backgroundRect.w, backgroundRect.h, backColor );
 	}
 
+	if ( dc != NULL && backgroundRect.w > 0.0f && backgroundRect.h > 0.0f && matColor.w() > 0.0f ) {
+		float xExpand = 0.0f;
+		float yExpand = 0.0f;
+		dc->GetVirtualScreenExpansion( forceAspectWidth, forceAspectHeight, xExpand, yExpand );
+
+		if ( xExpand > 0.0f ) {
+			const float baseWidth = ( forceAspectWidth > 0.0f ) ? forceAspectWidth : backgroundRect.w;
+			DrawBackgroundExpansionSlice( dc, backgroundRect, xExpand, baseWidth, FindWindowMaterial( this, "backgroundleft" ), matColor, BACKGROUND_EXPANSION_LEFT );
+			DrawBackgroundExpansionSlice( dc, backgroundRect, xExpand, baseWidth, FindWindowMaterial( this, "backgroundright" ), matColor, BACKGROUND_EXPANSION_RIGHT );
+		} else if ( yExpand > 0.0f ) {
+			const float baseHeight = ( forceAspectHeight > 0.0f ) ? forceAspectHeight : backgroundRect.h;
+			DrawBackgroundExpansionSlice( dc, backgroundRect, yExpand, baseHeight, FindWindowMaterial( this, "backgroundtop" ), matColor, BACKGROUND_EXPANSION_TOP );
+			DrawBackgroundExpansionSlice( dc, backgroundRect, yExpand, baseHeight, FindWindowMaterial( this, "backgroundbottom" ), matColor, BACKGROUND_EXPANSION_BOTTOM );
+		}
+	}
+
 	if ( background && matColor.w() && backgroundRect.w > 0.0f && backgroundRect.h > 0.0f ) {
 		float scalex, scaley;
 		if ( flags & WIN_NATURALMAT ) {
@@ -3161,6 +3225,18 @@ idWinVar *idWindow::GetWinVarByName(const char *_name, bool fixup, drawWin_t** o
 	}
 	if (idStr::Icmp(_name, "background") == 0) {
 		retVar = &backGroundName;
+	}
+	if (idStr::Icmp(_name, "backgroundLeft") == 0) {
+		retVar = &backgroundLeft;
+	}
+	if (idStr::Icmp(_name, "backgroundRight") == 0) {
+		retVar = &backgroundRight;
+	}
+	if (idStr::Icmp(_name, "backgroundTop") == 0) {
+		retVar = &backgroundTop;
+	}
+	if (idStr::Icmp(_name, "backgroundBottom") == 0) {
+		retVar = &backgroundBottom;
 	}
 	if (idStr::Icmp(_name, "visible") == 0) {
 		retVar = &visible;
@@ -6299,6 +6375,10 @@ void idWindow::SetDefaults ( void ) {
 
 	background = NULL;
 	backGroundName = "";
+	backgroundLeft = "";
+	backgroundRight = "";
+	backgroundTop = "";
+	backgroundBottom = "";
 }
 
 /*
