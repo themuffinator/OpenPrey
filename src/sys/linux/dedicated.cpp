@@ -42,6 +42,8 @@ void Sys_ShutdownInput( void ) { }
 
 void Sys_GrabMouseCursor( bool ) { }
 
+bool Sys_IsGameWindowFocused( void ) { return true; }
+
 int Sys_PollMouseInputEvents( void ) { return 0; }
 
 void Sys_EndMouseInputEvents( void ) { }

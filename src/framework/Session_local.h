@@ -358,6 +358,8 @@ public:
 private:
 	bool				BoxDialogSanityCheck( void );
 	void				EmitGameAuth( void );
+	bool				ShouldMuteForFocus( void ) const;
+	void				UpdateFocusMute( void );
 	
 	typedef enum {
 		CDKEY_UNKNOWN,	// need to perform checks on the key

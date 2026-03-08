@@ -741,7 +741,7 @@ void idSoundEmitterLocal::Update( int currentTime )
 		// listener is outside the world
 		return;
 	}
-	if( soundSystemLocal.muted || soundWorld != soundSystemLocal.currentSoundWorld )
+	if( soundSystemLocal.IsMuted() || soundWorld != soundSystemLocal.currentSoundWorld )
 	{
 		return;
 	}

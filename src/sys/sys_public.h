@@ -394,6 +394,7 @@ void			Sys_GrabMouseCursor( bool grabIt );
 
 void			Sys_ShowWindow( bool show );
 bool			Sys_IsWindowVisible( void );
+bool			Sys_IsGameWindowFocused( void );
 void			Sys_ShowConsole( int visLevel, bool quitOnClose );
 
 

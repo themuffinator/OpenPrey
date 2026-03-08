@@ -195,6 +195,10 @@ int Sys_ListFiles( const char *directory, const char *extension, idStrList &list
 void	Sys_GrabMouseCursor( bool grabIt ) {
 }
 
+bool Sys_IsGameWindowFocused( void ) {
+	return true;
+}
+
 bool	Sys_StringToNetAdr( const char *s, netadr_t *a ) {
 	return false;
 }

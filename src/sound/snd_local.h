@@ -498,16 +498,26 @@ public:
 		musicMuted = mute;
 	}
 
-	// sets the final output volume to 0
-	// This should only be used when the app is deactivated
-	// Since otherwise there will be problems with different subsystems muting and unmuting at different times
+	// Explicit mute requests from gameplay, loading, tools, demos, etc.
 	virtual void			SetMute( bool mute )
 	{
 		muted = mute;
 	}
-	virtual bool			IsMuted()
+	virtual void			SetMuteForFocus( bool mute )
+	{
+		focusMuted = mute;
+	}
+	virtual bool			IsMutedForFocus()
+	{
+		return focusMuted;
+	}
+	virtual bool			IsMutedExplicitly()
 	{
 		return muted;
+	}
+	virtual bool			IsMuted()
+	{
+		return muted || focusMuted;
 	}
 
 	virtual void			OnReloadSound( const idDecl* sound );
@@ -610,6 +620,7 @@ public:
 
 	int							soundTime;
 	bool						muted;
+	bool						focusMuted;
 	bool						musicMuted;
 	bool						needsRestart;
 
@@ -645,6 +656,7 @@ public:
 		currentSoundWorld( NULL ),
 		soundTime( 0 ),
 		muted( false ),
+		focusMuted( false ),
 		musicMuted( false ),
 		needsRestart( false ),
 		subtitleQueueChanged( false )

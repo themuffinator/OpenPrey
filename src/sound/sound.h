@@ -448,6 +448,9 @@ public:
 
 	// Sets the final output volume to 0.
 	virtual void			SetMute( bool mute ) = 0;
+	virtual void			SetMuteForFocus( bool mute ) = 0;
+	virtual bool			IsMutedForFocus() = 0;
+	virtual bool			IsMutedExplicitly() = 0;
 	virtual bool			IsMuted() = 0;
 
 	// Called by the decl system when a sound decl is reloaded

@@ -48,7 +48,7 @@ idCVar	idSessionLocal::com_aviDemoHeight( "com_aviDemoHeight", "256", CVAR_SYSTE
 idCVar	idSessionLocal::com_aviDemoTics( "com_aviDemoTics", "2", CVAR_SYSTEM | CVAR_INTEGER, "", 1, 60 );
 idCVar	idSessionLocal::com_wipeSeconds( "com_wipeSeconds", "1", CVAR_SYSTEM, "" );
 idCVar	idSessionLocal::com_guid( "com_guid", "", CVAR_SYSTEM | CVAR_ARCHIVE | CVAR_ROM, "" );
-idCVar	s_muteUnfocused( "s_muteUnfocused", "0", CVAR_ARCHIVE | CVAR_BOOL, "mute all audio when the application is out of focus" );
+idCVar	s_muteUnfocused( "s_muteUnfocused", "1", CVAR_ARCHIVE | CVAR_BOOL, "mute all audio when the application is out of focus" );
 
 extern idCVar g_levelloadmusic;
 
@@ -3366,7 +3366,7 @@ void idSessionLocal::Frame() {
 		!readDemo &&
 		!writeDemo &&
 		( timeDemo == TD_NO ) &&
-		soundSystem->IsMuted();
+		soundSystem->IsMutedExplicitly();
 
 	if ( shouldRestoreGameplayAudio ) {
 		soundSystem->SetMute( false );
@@ -3760,10 +3760,6 @@ void idSessionLocal::Init() {
 
 	cmdSystem->AddCommand( "hitch", Session_Hitch_f, CMD_FL_SYSTEM|CMD_FL_CHEAT, "hitches the game" );
 
-	// Keep gameplay audio active unless explicit muting is requested by game code.
-	// Stale archived focus-mute settings can otherwise leave sound permanently muted.
-	s_muteUnfocused.SetBool( false );
-
 	// Enforce windowed runtime policy for local development and validation runs.
 	cvarSystem->SetCVarInteger( "r_fullscreen", 0 );
 	cvarSystem->SetCVarInteger( "r_fullscreenDesktop", 0 );
@@ -3843,6 +3839,7 @@ idSessionLocal::SetPlayingSoundWorld
 */
 void idSessionLocal::SetPlayingSoundWorld( idSoundWorld *soundWorld ) {
 	soundSystem->SetPlayingSoundWorld( soundWorld );
+	UpdateFocusMute();
 }
 
 void idSessionLocal::SetPlayingSoundWorld() {
@@ -3860,6 +3857,14 @@ void idSessionLocal::SetPlayingSoundWorld() {
 	} else {
 		SetPlayingSoundWorld( sw );
 	}
+}
+
+bool idSessionLocal::ShouldMuteForFocus( void ) const {
+	return s_muteUnfocused.GetBool() && !Sys_IsGameWindowFocused();
+}
+
+void idSessionLocal::UpdateFocusMute( void ) {
+	soundSystem->SetMuteForFocus( ShouldMuteForFocus() );
 }
 
 /*

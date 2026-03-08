@@ -113,6 +113,18 @@ void Sys_InitInput(void) {
 	common->Printf( "------------------------------------\n" );
 }
 
+bool Sys_IsGameWindowFocused( void ) {
+	if ( dpy == NULL || win == 0 ) {
+		return true;
+	}
+
+	Window focusedWindow = None;
+	int revertTo = RevertToNone;
+	XGetInputFocus( dpy, &focusedWindow, &revertTo );
+
+	return focusedWindow == win;
+}
+
 //#define XEVT_DBG
 //#define XEVT_DBG2
 
