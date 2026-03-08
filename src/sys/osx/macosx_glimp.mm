@@ -1190,7 +1190,7 @@ void glAlphaFragmentOp3ATI (GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, G
 #endif
 #pragma mark -
 
-GLExtension_t GLimp_ExtensionPointer(const char *name) {
+void *GLimp_ExtensionPointer(const char *name) {
 	NSSymbol symbol;
 	char *symbolName;
 
@@ -1209,7 +1209,7 @@ GLExtension_t GLimp_ExtensionPointer(const char *name) {
 		return NULL;
 	}
 
-	return (GLExtension_t)(NSAddressOfSymbol(symbol));
+	return NSAddressOfSymbol(symbol);
 }
 
 void * wglGetProcAddress(const char *name) {
