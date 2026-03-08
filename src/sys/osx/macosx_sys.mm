@@ -47,6 +47,10 @@ If you have questions concerning this license or the applicable additional terms
 #import "macosx_timers.h"
 #endif
 
+#if !defined(NSPasteboardTypeString) && defined(NSStringPboardType)
+#define NSPasteboardTypeString NSStringPboardType
+#endif
+
 void	Sys_Init (void);
 
 char	*Sys_GetCurrentUser( void );
@@ -104,12 +108,12 @@ char *Sys_GetClipboardData(void) // FIXME
 
     pasteboard = [NSPasteboard generalPasteboard];
     pasteboardTypes = [pasteboard types];
-    if ([pasteboardTypes containsObject:NSStringPboardType]) {
+    if ([pasteboardTypes containsObject:NSPasteboardTypeString]) {
         NSString *clipboardString;
 
-        clipboardString = [pasteboard stringForType:NSStringPboardType];
+        clipboardString = [pasteboard stringForType:NSPasteboardTypeString];
         if (clipboardString && [clipboardString length] > 0) {
-            return strdup([clipboardString cString]);
+            return strdup([clipboardString UTF8String]);
         }
     }
     return NULL;
@@ -161,7 +165,7 @@ void Sys_Error(const char *error, ...)
     Sys_Shutdown();
 
     va_start(argptr,error);
-    formattedString = [[NSString alloc] initWithFormat:[NSString stringWithCString:error] arguments:argptr];
+    formattedString = [[NSString alloc] initWithFormat:[NSString stringWithUTF8String:error] arguments:argptr];
     va_end(argptr);
 
     NSLog(@"Sys_Error: %@", formattedString);

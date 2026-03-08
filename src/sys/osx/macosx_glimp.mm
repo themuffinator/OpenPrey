@@ -63,7 +63,7 @@ static bool isHidden = false;
 @implementation NSOpenGLContext (CGLContextAccess)
 - (CGLContextObj) cglContext;
 {
-	return _contextAuxiliary;
+	return [self CGLContextObj];
 }
 @end
 
@@ -75,9 +75,9 @@ CheckErrors
 void CheckErrors( void ) {		
 	GLenum   err;
 
-	err = qglGetError();
+	err = glGetError();
 	if ( err != GL_NO_ERROR ) {
-		common->Error( "glGetError: %s\n", qglGetString( err ) );
+		common->Error( "glGetError: 0x%04x\n", (unsigned int)err );
 	}
 }
 
@@ -99,7 +99,11 @@ void QGLCheckError( const char *message ) {
 			if (errorCount == 0) {
 				common->Warning("BREAK ON QGLErrorBreak to stop at the GL errors\n");
 			}
-			common->Warning("OpenGL Error(%s): 0x%04x -- %s\n", message, (int)error,  gluErrorString(error));
+			#if defined(GLEW_NO_GLU)
+				common->Warning("OpenGL Error(%s): 0x%04x\n", message, (int)error);
+			#else
+				common->Warning("OpenGL Error(%s): 0x%04x -- %s\n", message, (int)error, gluErrorString(error));
+			#endif
 			QGLErrorBreak();
 		}
 		errorCount++;
@@ -122,12 +126,12 @@ bool GLimp_SetMode(  glimpParms_t parms ) {
 	glConfig.isFullscreen = parms.fullScreen;
     
 	// draw something to show that GL is alive	
-	qglClearColor( 0.5, 0.5, 0.7, 0 );
-	qglClear( GL_COLOR_BUFFER_BIT );
+	glClearColor( 0.5, 0.5, 0.7, 0 );
+	glClear( GL_COLOR_BUFFER_BIT );
 	GLimp_SwapBuffers();
         
-	qglClearColor( 0.5, 0.5, 0.7, 0 );
-	qglClear( GL_COLOR_BUFFER_BIT );
+	glClearColor( 0.5, 0.5, 0.7, 0 );
+	glClear( GL_COLOR_BUFFER_BIT );
 	GLimp_SwapBuffers();
 
 	Sys_UnfadeScreen( Sys_DisplayToUse(), NULL );
@@ -409,9 +413,13 @@ static bool CreateGameWindow(  glimpParms_t parms ) {
 #endif
 
 	// Store off the pixel format attributes that we actually got
-	[pixelFormat getValues: (long *) &glConfig.colorBits forAttribute: NSOpenGLPFAColorSize forVirtualScreen: 0];
-	[pixelFormat getValues: (long *) &glConfig.depthBits forAttribute: NSOpenGLPFADepthSize forVirtualScreen: 0];
-	[pixelFormat getValues: (long *) &glConfig.stencilBits forAttribute: NSOpenGLPFAStencilSize forVirtualScreen: 0];
+	GLint pixelAttrib = 0;
+	[pixelFormat getValues: &pixelAttrib forAttribute: NSOpenGLPFAColorSize forVirtualScreen: 0];
+	glConfig.colorBits = pixelAttrib;
+	[pixelFormat getValues: &pixelAttrib forAttribute: NSOpenGLPFADepthSize forVirtualScreen: 0];
+	glConfig.depthBits = pixelAttrib;
+	[pixelFormat getValues: &pixelAttrib forAttribute: NSOpenGLPFAStencilSize forVirtualScreen: 0];
+	glConfig.stencilBits = pixelAttrib;
 
 	glConfig.displayFrequency = [[glw_state.gameMode objectForKey: (id)kCGDisplayRefreshRate] intValue];
     
@@ -423,7 +431,7 @@ static bool CreateGameWindow(  glimpParms_t parms ) {
 // This can be used to temporarily disassociate the GL context from the screen so that CoreGraphics can be used to draw to the screen.
 void Sys_PauseGL () {
 	if (!glw_state.glPauseCount) {
-		qglFinish (); // must do this to ensure the queue is complete
+		glFinish (); // must do this to ensure the queue is complete
         
 		// Have to call both to actually deallocate kernel resources and free the NSSurface
 		CGLClearDrawable(OSX_GetCGLContext());
@@ -484,10 +492,10 @@ bool GLimp_Init( glimpParms_t parms ) {
 	common->Printf(  "------------------\n" );
 
 	// get our config strings
-	glConfig.vendor_string = (const char *)qglGetString( GL_VENDOR );
-	glConfig.renderer_string = (const char *)qglGetString( GL_RENDERER );
-	glConfig.version_string = (const char *)qglGetString( GL_VERSION );
-	glConfig.extensions_string = (const char *)qglGetString( GL_EXTENSIONS );
+	glConfig.vendor_string = (const char *)glGetString( GL_VENDOR );
+	glConfig.renderer_string = (const char *)glGetString( GL_RENDERER );
+	glConfig.version_string = (const char *)glGetString( GL_VERSION );
+	glConfig.extensions_string = (const char *)glGetString( GL_EXTENSIONS );
 
 	//
 	// chipset specific configuration
@@ -649,7 +657,7 @@ void GLimp_SetGamma(unsigned short red[256],
                     unsigned short green[256],
                     unsigned short blue[256]) {
 	CGGammaValue redGamma[256], greenGamma[256], blueGamma[256];
-	CGTableCount i;
+	uint32_t i;
 	CGDisplayErr err;
         
 	for (i = 0; i < 256; i++) {
@@ -671,7 +679,9 @@ void GLimp_SetGamma(unsigned short red[256],
 /*****************************************************************************/
 
 #pragma mark -
-#pragma mark ¥ ATI_fragment_shader
+#pragma mark ATI_fragment_shader
+
+#if 0
 
 static GLuint sGeneratingProgram = 0;
 static int sCurrentPass;
@@ -1177,55 +1187,12 @@ void glAlphaFragmentOp2ATI (GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, G
 void glAlphaFragmentOp3ATI (GLenum op, GLuint dst, GLuint dstMod, GLuint arg1, GLuint arg1Rep, GLuint arg1Mod, GLuint arg2, GLuint arg2Rep, GLuint arg2Mod, GLuint arg3, GLuint arg3Rep, GLuint arg3Mod) {
 	glColorFragmentOp3ATI ( op, dst, GL_ALPHA, dstMod, arg1, arg1Rep, arg1Mod, arg2, arg2Rep, arg2Mod, arg3, arg3Rep, arg3Mod);
 }
+#endif
 #pragma mark -
 
 GLExtension_t GLimp_ExtensionPointer(const char *name) {
 	NSSymbol symbol;
 	char *symbolName;
-
-	// special case for ATI_fragment_shader calls to map to ATI_text_fragment_shader routines
-	if (!strcmp(name, "glGenFragmentShadersATI")) {
-		return (GLExtension_t)glGenFragmentShadersATI;
-	}
-	if (!strcmp(name, "glBindFragmentShaderATI")) {
-		return (GLExtension_t)glBindFragmentShaderATI;
-	}
-	if (!strcmp(name, "glDeleteFragmentShaderATI")) {
-		return (GLExtension_t)glDeleteFragmentShaderATI;
-	}
-	if (!strcmp(name, "glBeginFragmentShaderATI")) {
-		return (GLExtension_t)glBeginFragmentShaderATI;
-	}
-	if (!strcmp(name, "glEndFragmentShaderATI")) {
-		return (GLExtension_t)glEndFragmentShaderATI;
-	}
-	if (!strcmp(name, "glPassTexCoordATI")) {
-		return (GLExtension_t)glPassTexCoordATI;
-	}
-	if (!strcmp(name, "glSampleMapATI")) {
-		return (GLExtension_t)glSampleMapATI;
-	}
-	if (!strcmp(name, "glColorFragmentOp1ATI")) {
-		return (GLExtension_t)glColorFragmentOp1ATI;
-	}
-	if (!strcmp(name, "glColorFragmentOp2ATI")) {
-		return (GLExtension_t)glColorFragmentOp2ATI;
-	}
-	if (!strcmp(name, "glColorFragmentOp3ATI")) {
-		return (GLExtension_t)glColorFragmentOp3ATI;
-	}
-	if (!strcmp(name, "glAlphaFragmentOp1ATI")) {
-		return (GLExtension_t)glAlphaFragmentOp1ATI;
-	}
-	if (!strcmp(name, "glAlphaFragmentOp2ATI")) {
-		return (GLExtension_t)glAlphaFragmentOp2ATI;
-	}
-	if (!strcmp(name, "glAlphaFragmentOp3ATI")) {
-		return (GLExtension_t)glAlphaFragmentOp3ATI;
-	}
-	if (!strcmp(name, "glSetFragmentShaderConstantATI")) {
-		return (GLExtension_t)glSetFragmentShaderConstantATI;
-	}
 
 	// Prepend a '_' for the Unix C symbol mangling convention
 	symbolName = (char *)alloca(strlen(name) + 2);
@@ -1260,77 +1227,44 @@ void GLW_InitExtensions( void ) { }
 // Returns zero if there are no hardware renderers.  Otherwise, returns the max memory across all renderers (on the presumption that the screen that we'll use has the most memory).
 unsigned long Sys_QueryVideoMemory() {
 	CGLError err;
-	CGLRendererInfoObj rendererInfo, rendererInfos[MAX_RENDERER_INFO_COUNT];
-	long rendererInfoIndex, rendererInfoCount = MAX_RENDERER_INFO_COUNT;
-	long rendererIndex, rendererCount;
-	long maxVRAM = 0, vram = 0;
-	long accelerated;
-	long rendererID;
-	long totalRenderers = 0;
-    
-	err = CGLQueryRendererInfo(CGDisplayIDToOpenGLDisplayMask(Sys_DisplayToUse()), rendererInfos, &rendererInfoCount);
+	CGLRendererInfoObj rendererInfo = NULL;
+	GLint rendererCount = 0;
+	GLint rendererIndex = 0;
+	GLint maxVRAM = 0;
+	GLint vram = 0;
+	GLint accelerated = 0;
+
+	err = CGLQueryRendererInfo(CGDisplayIDToOpenGLDisplayMask(Sys_DisplayToUse()), &rendererInfo, &rendererCount);
 	if (err) {
 		common->Printf("CGLQueryRendererInfo -> %d\n", err);
-		return vram;
+		return 0;
 	}
-    
-	//common->Printf("rendererInfoCount = %d\n", rendererInfoCount);
-	for (rendererInfoIndex = 0; rendererInfoIndex < rendererInfoCount && totalRenderers < rendererInfoCount; rendererInfoIndex++) {
-		rendererInfo = rendererInfos[rendererInfoIndex];
-		//common->Printf("rendererInfo: 0x%08x\n", rendererInfo);
-        
 
-		err = CGLDescribeRenderer(rendererInfo, 0, kCGLRPRendererCount, &rendererCount);
-		if (err) {
-			common->Printf("CGLDescribeRenderer(kCGLRPRendererID) -> %d\n", err);
+	for (rendererIndex = 0; rendererIndex < rendererCount; rendererIndex++) {
+		err = CGLDescribeRenderer(rendererInfo, rendererIndex, kCGLRPAccelerated, &accelerated);
+		if (err || !accelerated) {
 			continue;
 		}
-		//common->Printf("  rendererCount: %d\n", rendererCount);
 
-		for (rendererIndex = 0; rendererIndex < rendererCount; rendererIndex++) {
-			totalRenderers++;
-			//common->Printf("  rendererIndex: %d\n", rendererIndex);
-            
-			rendererID = 0xffffffff;
-			err = CGLDescribeRenderer(rendererInfo, rendererIndex, kCGLRPRendererID, &rendererID);
-			if (err) {
-				common->Printf("CGLDescribeRenderer(kCGLRPRendererID) -> %d\n", err);
-				continue;
-			}
-			//common->Printf("    rendererID: 0x%08x\n", rendererID);
-            
-			accelerated = 0;
-			err = CGLDescribeRenderer(rendererInfo, rendererIndex, kCGLRPAccelerated, &accelerated);
-			if (err) {
-				common->Printf("CGLDescribeRenderer(kCGLRPAccelerated) -> %d\n", err);
-				continue;
-			}
-			//common->Printf("    accelerated: %d\n", accelerated);
-			if (!accelerated)
-				continue;
-            
-			vram = 0;
-			err = CGLDescribeRenderer(rendererInfo, rendererIndex, kCGLRPVideoMemory, &vram);
-			if (err) {
-				common->Printf("CGLDescribeRenderer -> %d\n", err);
-				continue;
-			}
-			//common->Printf("    vram: 0x%08x\n", vram);
-            
-			// presumably we'll be running on the best card, so we'll take the max of the vrams
-			if (vram > maxVRAM)
-				maxVRAM = vram;
+#if defined(kCGLRPVideoMemoryMegabytes)
+		err = CGLDescribeRenderer(rendererInfo, rendererIndex, kCGLRPVideoMemoryMegabytes, &vram);
+		if (!err) {
+			vram *= 1024 * 1024;
 		}
-        
-#if 0
-		err = CGLDestroyRendererInfo(rendererInfo);
-		if (err) {
-			common->Printf("CGLDestroyRendererInfo -> %d\n", err);
-		}
+#else
+		err = CGLDescribeRenderer(rendererInfo, rendererIndex, kCGLRPVideoMemory, &vram);
 #endif
+		if (err) {
+			common->Printf("CGLDescribeRenderer -> %d\n", err);
+			continue;
+		}
+		if (vram > maxVRAM) {
+			maxVRAM = vram;
+		}
 	}
 
-	return maxVRAM;
+	(void)CGLDestroyRendererInfo(rendererInfo);
+	return (unsigned long)maxVRAM;
 }
 
 
@@ -1499,7 +1433,7 @@ NSDictionary *Sys_GetMatchingDisplayMode( glimpParms_t parms ) {
 	modeCount = [displayModes count];
 	if (verbose) {
 		common->Printf( "%d modes avaliable\n", modeCount);
-		common->Printf( "Current mode is %s\n", [[(id)CGDisplayCurrentMode(glw_state.display) description] cString]);
+		common->Printf( "Current mode is %s\n", [[(id)CGDisplayCurrentMode(glw_state.display) description] UTF8String]);
 	}
     
 	// Default to the current desktop mode
@@ -1511,7 +1445,7 @@ NSDictionary *Sys_GetMatchingDisplayMode( glimpParms_t parms ) {
         
 		mode = [displayModes objectAtIndex: modeIndex];
 		if (verbose) {
-			common->Printf( " mode %d -- %s\n", modeIndex, [[mode description] cString]);
+			common->Printf( " mode %d -- %s\n", modeIndex, [[mode description] UTF8String]);
 		}
 
 		// Make sure we get the right size
@@ -1578,7 +1512,7 @@ NSDictionary *Sys_GetMatchingDisplayMode( glimpParms_t parms ) {
 #define MAX_DISPLAYS 128
 
 void Sys_GetGammaTable(glwgamma_t *table) {
-	CGTableCount tableSize = 512;
+	uint32_t tableSize = 512;
 	CGDisplayErr err;
     
 	table->tableSize = tableSize;
@@ -1626,9 +1560,9 @@ void Sys_StoreGammaTables() {
 
 //  This isn't a mathematically correct fade, but we don't care that much.
 void Sys_SetScreenFade(glwgamma_t *table, float fraction) {
-	CGTableCount tableSize;
+	uint32_t tableSize;
 	CGGammaValue *red, *blue, *green;
-	CGTableCount gammaIndex;
+	uint32_t gammaIndex;
     
 	//    if (!glConfig.deviceSupportsGamma)
 	//        return;
@@ -1773,7 +1707,7 @@ void Sys_UnfadeScreen(CGDirectDisplayID display, glwgamma_t *table) {
 	common->Printf("Unfading display 0x%08x\n", display);
 
 	if (table) {
-		CGTableCount i;
+		uint32_t i;
         
 		common->Printf("Given table:\n");
 		for (i = 0; i < table->tableSize; i++) {

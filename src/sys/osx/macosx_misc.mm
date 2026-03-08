@@ -26,10 +26,10 @@ If you have questions concerning this license or the applicable additional terms
 ===========================================================================
 */
 
+#include "../../idlib/precompiled.h"
 #define GL_GLEXT_LEGACY // AppKit.h include pulls in gl.h already
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
-#include "../../idlib/precompiled.h"
 #include "../sys_local.h"
 
 /*
@@ -49,7 +49,7 @@ void idSysLocal::OpenURL( const char *url, bool doexit ) {
 
 	
 	[[ NSWorkspace sharedWorkspace] openURL: [ NSURL URLWithString: 
-		[ NSString stringWithCString: url ] ] ];
+		[ NSString stringWithUTF8String: url ] ] ];
 
 	if ( doexit ) {
 		quit_spamguard = true;
@@ -73,7 +73,7 @@ OSX_GetLocalizedString
 */
 const char* OSX_GetLocalizedString( const char* key )
 {
-	NSString *string = [ [ NSBundle mainBundle ] localizedStringForKey:[ NSString stringWithCString: key ]
+	NSString *string = [ [ NSBundle mainBundle ] localizedStringForKey:[ NSString stringWithUTF8String: key ]
 													 value:@"No translation" table:nil];
-	return [string cString];
+	return [string UTF8String];
 }

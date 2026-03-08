@@ -38,7 +38,7 @@ If you have questions concerning this license or the applicable additional terms
 
 #include "tr_local.h"
 #include "DXT/DXTCodec.h"
-#include "color/ColorSpace.h"
+#include "Color/ColorSpace.h"
 
 idCVar image_highQualityCompression( "image_highQualityCompression", "0", CVAR_BOOL, "Use high quality (slow) compression" );
 
