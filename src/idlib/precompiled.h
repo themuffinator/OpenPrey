@@ -172,7 +172,7 @@ public:
 
 #endif
 
-#ifdef MACOS_X
+#if defined(MACOS_X) || defined(__APPLE__)
 
 // for offsetof
 #include <stddef.h>

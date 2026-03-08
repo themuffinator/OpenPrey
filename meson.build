@@ -328,6 +328,21 @@ if build_engine
       install: true,
       install_dir: install_root_dir,
     )
+  elif host_system == 'darwin'
+    executable(
+      engine_client_binary_name,
+      engine_sources,
+      include_directories: engine_include_dirs,
+      dependencies: deps,
+      cpp_args: engine_cpp_args,
+      c_args: engine_c_args,
+      objcpp_args: engine_cpp_args,
+      objc_args: engine_c_args,
+      cpp_pch: pch_headers,
+      link_args: engine_link_args,
+      install: true,
+      install_dir: install_root_dir,
+    )
   else
     executable(
       engine_client_binary_name,
@@ -356,6 +371,21 @@ if build_engine
       c_args: dedicated_c_args,
       cpp_pch: pch_headers,
       win_subsystem: 'windows',
+      link_args: engine_link_args,
+      install: true,
+      install_dir: install_root_dir,
+    )
+  elif host_system == 'darwin'
+    executable(
+      engine_ded_binary_name,
+      engine_sources,
+      include_directories: engine_include_dirs,
+      dependencies: deps,
+      cpp_args: dedicated_cpp_args,
+      c_args: dedicated_c_args,
+      objcpp_args: dedicated_cpp_args,
+      objc_args: dedicated_c_args,
+      cpp_pch: pch_headers,
       link_args: engine_link_args,
       install: true,
       install_dir: install_root_dir,
