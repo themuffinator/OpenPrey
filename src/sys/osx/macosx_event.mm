@@ -504,6 +504,15 @@ void IN_DeactivateMouse( void ) {
 
 /*
 ===============
+Sys_IsGameWindowFocused
+===============
+*/
+bool Sys_IsGameWindowFocused( void ) {
+	return [NSApp isActive];
+}
+
+/*
+===============
 Sys_MapCharForKey
 ===============
 */
